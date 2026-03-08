@@ -52,4 +52,17 @@ impl Token {
             literal,
         }
     }
+
+    pub fn lookup_ident(ident: &str) -> TokenType {
+        match ident {
+            "ထား" => TokenType::Let,
+            "ဖန်ရှင်" => TokenType::Function,
+            "တကယ်လို့" => TokenType::If,
+            "မဟုတ်ရင်" => TokenType::Else,
+            "ဒါယူ" => TokenType::Return,
+            "မှန်" => TokenType::True,
+            "မှား" => TokenType::False,
+            _ => TokenType::Ident,
+        }
+    }
 }
