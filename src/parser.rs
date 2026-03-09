@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Identifier, LetStatement, Program, Statement},
+    ast::{Identifier, LetStatement, Program, ReturnStatement, Statement},
     lexer::Lexer,
     token::{Token, TokenType},
 };
@@ -56,7 +56,7 @@ impl<'a> Parser<'a> {
         };
 
         while self.cur_token.token_type != TokenType::Eof {
-            if let Some(stmt) = self.parse_let_statement() {
+            if let Some(stmt) = self.parse_statement() {
                 program.statements.push(stmt);
             }
             self.next_token();
@@ -67,10 +67,12 @@ impl<'a> Parser<'a> {
     pub fn parse_statement(&mut self) -> Option<Statement> {
         match self.cur_token.token_type {
             TokenType::Let => self.parse_let_statement(),
+            TokenType::Return => self.parse_return_statement(),
             _ => None,
         }
     }
 
+    // LetStatement parser
     pub fn parse_let_statement(&mut self) -> Option<Statement> {
         let token = self.cur_token.clone();
 
@@ -98,6 +100,21 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    // ReturnStatement Parser
+    pub fn parse_return_statement(&mut self) -> Option<Statement> {
+        let token = self.cur_token.clone();
+        self.next_token();
+
+        while !self.cur_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        return Some(Statement::Return(ReturnStatement {
+            token,
+            return_value: None,
+        }));
+    }
+
     pub fn cur_token_is(&self, t: TokenType) -> bool {
         self.cur_token.token_type == t
     }
@@ -117,3 +134,4 @@ impl<'a> Parser<'a> {
         }
     }
 }
+

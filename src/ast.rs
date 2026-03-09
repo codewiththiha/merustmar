@@ -11,6 +11,19 @@ impl Identifier {
         return &self.token.literal;
     }
 }
+// ReturnStatement
+
+#[derive(Debug)]
+pub struct ReturnStatement {
+    pub token: Token,
+    pub return_value: Option<Expression>,
+}
+
+impl ReturnStatement {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
 
 // Let Statement
 
@@ -47,12 +60,14 @@ impl Expression {
 #[derive(Debug)]
 pub enum Statement {
     Let(LetStatement),
+    Return(ReturnStatement),
 }
 
 impl Statement {
     pub fn token_literal(&self) -> &str {
         match self {
             Statement::Let(ls) => ls.token_literal(),
+            Statement::Return(rs) => rs.token_literal(),
         }
     }
 }

@@ -119,3 +119,67 @@ fn test_let_statements_invalid() {
         eprintln!("  {}", msg);
     }
 }
+
+// ← NEW: Return statement test
+#[test]
+fn test_return_statements() {
+    let input = "ဒါယူ 5။
+ဒါယူ 10။
+ဒါယူ 993322။
+";
+
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    let program = parser.parse_program();
+
+    // Check for parser errors
+    check_parser_errors(&parser);
+
+    // Check statement count
+    assert_eq!(
+        program.statements.len(),
+        3,
+        "program.statements does not contain 3 statements. got={}",
+        program.statements.len()
+    );
+
+    // Check each statement is a Return statement
+    for (i, stmt) in program.statements.iter().enumerate() {
+        if !test_return_statement(stmt, i) {
+            return;
+        }
+    }
+}
+
+// ← NEW: Helper to validate return statements
+fn test_return_statement(stmt: &Statement, index: usize) -> bool {
+    // Check TokenLiteral()
+    if stmt.token_literal() != "ဒါယူ" {
+        eprintln!(
+            "stmt[{}].token_literal() not 'ဒါယူ'. got={:?}",
+            index,
+            stmt.token_literal()
+        );
+        return false;
+    }
+
+    // Pattern match instead of type assertion (Go: stmt.(*ast.ReturnStatement))
+    match stmt {
+        Statement::Return(return_stmt) => {
+            // TokenLiteral check (redundant but matches Go test)
+            if return_stmt.token_literal() != "ဒါယူ" {
+                eprintln!(
+                    "return_stmt[{}].token_literal() not 'ဒါယူ'. got={}",
+                    index,
+                    return_stmt.token_literal()
+                );
+                return false;
+            }
+            true
+        }
+        _ => {
+            eprintln!("stmt[{}] not Statement::Return. got={:?}", index, stmt);
+            false
+        }
+    }
+}
