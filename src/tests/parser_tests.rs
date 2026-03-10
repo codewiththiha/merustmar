@@ -309,3 +309,114 @@ fn test_integer_literal_expression() {
         ),
     }
 }
+
+#[test]
+fn test_parsing_prefix_expressions() {
+    // Table-driven test data (Go's slice of structs → Rust Vec of structs)
+    struct PrefixTest {
+        input: &'static str,
+        operator: &'static str,
+        integer_value: i64,
+    }
+
+    let prefix_tests = vec![
+        PrefixTest {
+            input: "!5။",
+            operator: "!",
+            integer_value: 5,
+        },
+        PrefixTest {
+            input: "-15။",
+            operator: "-",
+            integer_value: 15,
+        },
+    ];
+
+    for (i, tt) in prefix_tests.iter().enumerate() {
+        let mut lexer = Lexer::new(tt.input);
+        let mut parser = Parser::new(&mut lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        // Check statement count
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "test[{}] - program.Statements does not contain 1 statements. got={}",
+            i,
+            program.statements.len()
+        );
+
+        // Check it's an ExpressionStatement (Go: type assertion)
+        let stmt = match &program.statements[0] {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!(
+                "test[{}] - program.Statements[0] is not ExpressionStatement. got={:?}",
+                i, program.statements[0]
+            ),
+        };
+
+        // Check it's a PrefixExpression (Go: type assertion)
+        let prefix_exp = match &stmt.expression {
+            Some(Expression::PrefixExpression(prefix)) => prefix,
+            _ => panic!(
+                "test[{}] - stmt.Expression is not PrefixExpression. got={:?}",
+                i, stmt.expression
+            ),
+        };
+
+        // Check operator
+        assert_eq!(
+            prefix_exp.operator, tt.operator,
+            "test[{}] - exp.Operator is not '{}'. got={}",
+            i, tt.operator, prefix_exp.operator
+        );
+
+        // Check right expression is IntegerLiteral with correct value
+        assert!(
+            test_integer_literal(&prefix_exp.right, tt.integer_value),
+            "test[{}] - Right expression is not correct IntegerLiteral",
+            i
+        );
+    }
+}
+
+fn test_integer_literal(right: &Option<Box<Expression>>, expected_value: i64) -> bool {
+    // Unbox the Expression
+    let expr = match right {
+        Some(boxed) => boxed.as_ref(),
+        None => {
+            eprintln!("il is None, expected IntegerLiteral");
+            return false;
+        }
+    };
+
+    // Check it's an IntegerLiteral
+    let int_lit = match expr {
+        Expression::IntegerLiteral(il) => il,
+        _ => {
+            eprintln!("il not IntegerLiteral. got={:?}", expr);
+            return false;
+        }
+    };
+
+    // Check value
+    if int_lit.value != expected_value {
+        eprintln!("integ.Value not {}. got={}", expected_value, int_lit.value);
+        return false;
+    }
+
+    // Check TokenLiteral
+    let expected_literal = expected_value.to_string();
+    if int_lit.token_literal() != expected_literal {
+        eprintln!(
+            "integ.TokenLiteral not {}. got={}",
+            expected_value,
+            int_lit.token_literal()
+        );
+        return false;
+    }
+
+    true
+}

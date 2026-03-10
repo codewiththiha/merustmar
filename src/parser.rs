@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Expression, ExpressionStatement, Identifier, IntegerLiteral, LetStatement, Program,
-        ReturnStatement, Statement,
+        Expression, ExpressionStatement, Identifier, IntegerLiteral, LetStatement,
+        PrefixExpression, Program, ReturnStatement, Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -36,6 +36,8 @@ impl<'a> Parser<'a> {
         };
         parser.register_prefix(TokenType::Ident, Parser::parse_identifier);
         parser.register_prefix(TokenType::Int, Parser::parse_integer_literal);
+        parser.register_prefix(TokenType::Bang, Parser::parse_prefix_expression);
+        parser.register_prefix(TokenType::Minus, Parser::parse_prefix_expression);
         parser.next_token();
         parser.next_token();
         parser
@@ -144,6 +146,23 @@ impl<'a> Parser<'a> {
             token,
             name,
             value: None,
+        }))
+    }
+
+    pub fn parse_prefix_expression(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let operator = self.cur_token.literal.clone();
+
+        self.next_token();
+
+        let right = self
+            .parse_expression(Precedence::Prefix)
+            .map(|x| Box::new(x));
+
+        Some(Expression::PrefixExpression(PrefixExpression {
+            token,
+            operator,
+            right,
         }))
     }
 

@@ -1,5 +1,48 @@
 use crate::token::Token;
 
+// PrefixExpression
+
+#[derive(Debug)]
+pub struct PrefixExpression {
+    pub token: Token,
+    pub right: Option<Box<Expression>>,
+    pub operator: String,
+}
+
+impl PrefixExpression {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+/// This was only works if i didn't use Box
+// impl std::fmt::Display for PrefixExpression {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(
+//             f,
+//             "({}{})",
+//             self.operator,
+//             self.right.as_ref().map_or("", |r| r.token_literal())
+//         )
+//     }
+// }
+
+impl std::fmt::Display for PrefixExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(")?;
+        write!(f, "{}", self.operator)?;
+
+        if let Some(ref expr) = self.right {
+            // Rust automatically "reaches into" the Box to find
+            // the Display implementation for Expression
+            write!(f, "{}", expr)?;
+        }
+
+        write!(f, ")")
+    }
+}
+
+// IntegerLiteral
 #[derive(Debug)]
 pub struct IntegerLiteral {
     pub token: Token,
@@ -101,6 +144,7 @@ impl std::fmt::Display for LetStatement {
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
+    PrefixExpression(PrefixExpression),
 }
 
 impl Expression {
@@ -108,6 +152,7 @@ impl Expression {
         match self {
             Expression::Identifier(i) => i.token_literal(),
             Expression::IntegerLiteral(il) => il.token_literal(),
+            Expression::PrefixExpression(pe) => pe.token_literal(),
         }
     }
 }
@@ -117,6 +162,7 @@ impl std::fmt::Display for Expression {
         match self {
             Expression::Identifier(i) => write!(f, "{}", i),
             Expression::IntegerLiteral(il) => write!(f, "{}", il),
+            Expression::PrefixExpression(pe) => write!(f, "{}", pe),
         }
     }
 }
