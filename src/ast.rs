@@ -99,6 +99,7 @@ impl std::fmt::Display for Expression {
     }
 }
 
+#[derive(Debug)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Option<Expression>,
@@ -112,7 +113,7 @@ impl ExpressionStatement {
 
 impl std::fmt::Display for ExpressionStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ref expr) = self.expression {
+        if let Some(expr) = &self.expression {
             write!(f, "{}", expr)
         } else {
             Ok(())
@@ -126,6 +127,7 @@ impl std::fmt::Display for ExpressionStatement {
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
+    Expression(ExpressionStatement),
 }
 
 impl Statement {
@@ -133,6 +135,7 @@ impl Statement {
         match self {
             Statement::Let(ls) => ls.token_literal(),
             Statement::Return(rs) => rs.token_literal(),
+            Statement::Expression(es) => es.token_literal(),
         }
     }
 }
@@ -142,6 +145,7 @@ impl std::fmt::Display for Statement {
         match self {
             Statement::Let(ls) => write!(f, "{}", ls),
             Statement::Return(rs) => write!(f, "{}", rs),
+            Statement::Expression(es) => write!(f, "{}", es),
         }
     }
 }
@@ -164,6 +168,7 @@ impl Program {
 
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // way cleaner than using ref
         for stmt in &self.statements {
             write!(f, "{}", stmt)?;
         }

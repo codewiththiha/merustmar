@@ -1,14 +1,27 @@
+use std::collections::HashMap;
+
 use crate::{
-    ast::{Identifier, LetStatement, Program, ReturnStatement, Statement},
+    ast::{
+        Expression, ExpressionStatement, Identifier, LetStatement, Program, ReturnStatement,
+        Statement,
+    },
     lexer::Lexer,
     token::{Token, TokenType},
 };
 
+// New Encounter (we can define fn types too in rust)
+
+type PrefixParseFn<'a> = fn(&mut Parser<'a>) -> Option<Expression>;
+type InfixParseFn<'a> = fn(&mut Parser<'a>, Expression) -> Option<Expression>;
+
 pub struct Parser<'a> {
     lexer: &'a mut Lexer<'a>,
-    cur_token: Token,
-    peek_token: Token,
+    pub cur_token: Token,
+    pub peek_token: Token,
     errors: Vec<String>,
+    // Pass 'a into the types here
+    pub prefix_parse_fns: HashMap<TokenType, PrefixParseFn<'a>>,
+    infix_parse_fns: HashMap<TokenType, InfixParseFn<'a>>,
 }
 
 impl<'a> Parser<'a> {
@@ -18,10 +31,21 @@ impl<'a> Parser<'a> {
             cur_token: Token::new(TokenType::Illegial, "".to_string()),
             peek_token: Token::new(TokenType::Illegial, "".to_string()),
             errors: Vec::new(),
+            prefix_parse_fns: HashMap::new(),
+            infix_parse_fns: HashMap::new(),
         };
+        parser.register_prefix(TokenType::Ident, Parser::parse_identifier);
         parser.next_token();
         parser.next_token();
         parser
+    }
+
+    fn register_prefix(&mut self, token_type: TokenType, fn_ptr: PrefixParseFn<'a>) {
+        self.prefix_parse_fns.insert(token_type, fn_ptr);
+    }
+
+    fn register_infix(&mut self, token_type: TokenType, fn_ptr: InfixParseFn<'a>) {
+        self.infix_parse_fns.insert(token_type, fn_ptr);
     }
 
     // notice how in Vec we need to add & explictly
@@ -68,8 +92,15 @@ impl<'a> Parser<'a> {
         match self.cur_token.token_type {
             TokenType::Let => self.parse_let_statement(),
             TokenType::Return => self.parse_return_statement(),
-            _ => None,
+            _ => self.parse_expression_statement(),
         }
+    }
+
+    pub fn parse_identifier(&mut self) -> Option<Expression> {
+        Some(Expression::Identifier(Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        }))
     }
 
     // LetStatement parser
@@ -105,7 +136,7 @@ impl<'a> Parser<'a> {
         let token = self.cur_token.clone();
         self.next_token();
 
-        while !self.cur_token_is(TokenType::Semicolon) {
+        while !self.cur_token_is(TokenType::Semicolon) || !self.cur_token_is(TokenType::Eof) {
             self.next_token();
         }
 
@@ -133,5 +164,68 @@ impl<'a> Parser<'a> {
             false
         }
     }
+
+    pub fn parse_expression_statement(&mut self) -> Option<Statement> {
+        let token = self.cur_token.clone();
+        let expression = self.parse_expression(Precedence::Lowest);
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        Some(Statement::Expression(ExpressionStatement {
+            token,
+            expression,
+        }))
+    }
+
+    pub fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
+        let prefix_fn = self
+            .prefix_parse_fns
+            .get(&self.cur_token.token_type)
+            .copied();
+
+        if prefix_fn.is_none() {
+            self.no_prefix_parse_fn_error();
+            return None;
+        }
+        let left_exp = prefix_fn.unwrap()(self);
+        left_exp
+    }
+
+    pub fn no_prefix_parse_fn_error(&mut self) {
+        let msg = format!(
+            "no prefix parse function for {:?} found",
+            self.cur_token.token_type
+        );
+        self.errors.push(msg);
+    }
 }
 
+// Precedence constants
+
+pub enum Precedence {
+    Lowest = 0,
+    Equals = 1,      // ==
+    LessGreater = 2, // > or <
+    Sum = 3,         // +
+    Product = 4,     // *
+    Prefix = 5,      // -X or !X
+    Call = 6,        // myFunction(X)
+}
+
+impl Precedence {
+    pub fn from_token_type(token_type: TokenType) -> Self {
+        match token_type {
+            TokenType::Eq => Precedence::Equals,
+            TokenType::NotEq => Precedence::Equals,
+            TokenType::Lt => Precedence::LessGreater,
+            TokenType::Gt => Precedence::LessGreater,
+            TokenType::Plus => Precedence::Sum,
+            TokenType::Minus => Precedence::Sum,
+            TokenType::Slash => Precedence::Product,
+            TokenType::Asterisk => Precedence::Product,
+            TokenType::LParen => Precedence::Call,
+            _ => Precedence::Lowest,
+        }
+    }
+}

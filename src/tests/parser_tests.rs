@@ -1,4 +1,9 @@
-use crate::{ast::Statement, lexer::Lexer, parser::Parser};
+use crate::{
+    ast::{Expression, Statement},
+    lexer::Lexer,
+    parser::Parser,
+    token::TokenType,
+};
 
 #[test]
 fn test_let_statements() {
@@ -182,4 +187,80 @@ fn test_return_statement(stmt: &Statement, index: usize) -> bool {
             false
         }
     }
+}
+
+#[test]
+fn test_identifier_expression() {
+    let input = "foobar။";
+
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program has not enough statements. got={}",
+        program.statements.len()
+    );
+
+    match &program.statements[0] {
+        Statement::Expression(expr_stmt) => match &expr_stmt.expression {
+            Some(Expression::Identifier(ident)) => {
+                assert_eq!(
+                    ident.value, "foobar",
+                    "ident.Value not foobar. got={}",
+                    ident.value
+                );
+                assert_eq!(
+                    ident.token_literal(),
+                    "foobar",
+                    "ident.TokenLiteral not foobar. got={}",
+                    ident.token_literal()
+                );
+            }
+            _ => panic!(
+                "stmt.Expression is not Identifier. got={:?}",
+                expr_stmt.expression
+            ),
+        },
+        _ => panic!(
+            "program.Statements[0] is not ExpressionStatement. got={:?}",
+            program.statements[0]
+        ),
+    }
+}
+
+// src/tests/parser_tests.rs
+
+#[test]
+fn test_parser_initialization() {
+    let input = "foobar။";
+
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+
+    // Debug: Check what tokens we have
+    eprintln!(
+        "cur_token: {:?} = {:?}",
+        parser.cur_token.token_type, parser.cur_token.literal
+    );
+    eprintln!(
+        "peek_token: {:?} = {:?}",
+        parser.peek_token.token_type, parser.peek_token.literal
+    );
+
+    // Check if prefix_parse_fns has Ident registered
+    eprintln!(
+        "prefix_parse_fns has Ident: {}",
+        parser.prefix_parse_fns.contains_key(&TokenType::Ident)
+    );
+
+    let program = parser.parse_program();
+
+    eprintln!("Parsed {} statements", program.statements.len());
+
+    assert_eq!(program.statements.len(), 1);
 }
