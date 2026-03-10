@@ -11,6 +11,12 @@ impl Identifier {
         return &self.token.literal;
     }
 }
+
+impl std::fmt::Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
 // ReturnStatement
 
 #[derive(Debug)]
@@ -22,6 +28,20 @@ pub struct ReturnStatement {
 impl ReturnStatement {
     pub fn token_literal(&self) -> &str {
         &self.token.literal
+    }
+}
+
+impl std::fmt::Display for ReturnStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = String::new();
+
+        out.push_str(&self.token_literal());
+        out.push(' ');
+        if let Some(ref value) = self.return_value {
+            out.push_str(&value.to_string());
+        }
+        out.push('။');
+        write!(f, "{}", out)
     }
 }
 
@@ -40,6 +60,22 @@ impl LetStatement {
     }
 }
 
+impl std::fmt::Display for LetStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = String::new();
+
+        out.push_str(&self.token_literal());
+        out.push(' ');
+        out.push_str(&self.name.value);
+        out.push_str(" = ");
+        if let Some(ref value) = self.value {
+            out.push_str(&value.to_string());
+        }
+        out.push('။');
+        write!(f, "{}", out)
+    }
+}
+
 // Expression
 
 #[derive(Debug)]
@@ -51,6 +87,35 @@ impl Expression {
     pub fn token_literal(&self) -> &str {
         match self {
             Expression::Identifier(i) => i.token_literal(),
+        }
+    }
+}
+
+impl std::fmt::Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expression::Identifier(i) => write!(f, "{}", i),
+        }
+    }
+}
+
+pub struct ExpressionStatement {
+    pub token: Token,
+    pub expression: Option<Expression>,
+}
+
+impl ExpressionStatement {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for ExpressionStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(ref expr) = self.expression {
+            write!(f, "{}", expr)
+        } else {
+            Ok(())
         }
     }
 }
@@ -72,6 +137,15 @@ impl Statement {
     }
 }
 
+impl std::fmt::Display for Statement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Statement::Let(ls) => write!(f, "{}", ls),
+            Statement::Return(rs) => write!(f, "{}", rs),
+        }
+    }
+}
+
 // Program Main Struct of AST
 
 pub struct Program {
@@ -85,5 +159,14 @@ impl Program {
         } else {
             ""
         }
+    }
+}
+
+impl std::fmt::Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for stmt in &self.statements {
+            write!(f, "{}", stmt)?;
+        }
+        Ok(())
     }
 }
