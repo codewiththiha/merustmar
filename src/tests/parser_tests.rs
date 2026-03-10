@@ -233,8 +233,6 @@ fn test_identifier_expression() {
     }
 }
 
-// src/tests/parser_tests.rs
-
 #[test]
 fn test_parser_initialization() {
     let input = "foobar။";
@@ -263,4 +261,51 @@ fn test_parser_initialization() {
     eprintln!("Parsed {} statements", program.statements.len());
 
     assert_eq!(program.statements.len(), 1);
+}
+
+#[test]
+fn test_integer_literal_expression() {
+    let input = "5။";
+
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program has not enough statements. got={}",
+        program.statements.len()
+    );
+
+    match &program.statements[0] {
+        Statement::Expression(expr_stmt) => {
+            // Check the expression is an IntegerLiteral
+            match &expr_stmt.expression {
+                Some(Expression::IntegerLiteral(int_lit)) => {
+                    assert_eq!(
+                        int_lit.value, 5,
+                        "literal.Value not 5. got={}",
+                        int_lit.value
+                    );
+                    assert_eq!(
+                        int_lit.token_literal(),
+                        "5",
+                        "literal.TokenLiteral not 5. got={}",
+                        int_lit.token_literal()
+                    );
+                }
+                _ => panic!(
+                    "stmt.Expression is not IntegerLiteral. got={:?}",
+                    expr_stmt.expression
+                ),
+            }
+        }
+        _ => panic!(
+            "program.Statements[0] is not ExpressionStatement. got={:?}",
+            program.statements[0]
+        ),
+    }
 }

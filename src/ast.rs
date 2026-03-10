@@ -1,6 +1,25 @@
 use crate::token::Token;
 
 #[derive(Debug)]
+pub struct IntegerLiteral {
+    pub token: Token,
+    pub value: i64,
+}
+
+impl IntegerLiteral {
+    pub fn token_literal(&self) -> &str {
+        return &self.token.literal;
+    }
+}
+
+impl std::fmt::Display for IntegerLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+// Identifier
+#[derive(Debug)]
 pub struct Identifier {
     pub token: Token,
     pub value: String,
@@ -81,12 +100,14 @@ impl std::fmt::Display for LetStatement {
 #[derive(Debug)]
 pub enum Expression {
     Identifier(Identifier),
+    IntegerLiteral(IntegerLiteral),
 }
 
 impl Expression {
     pub fn token_literal(&self) -> &str {
         match self {
             Expression::Identifier(i) => i.token_literal(),
+            Expression::IntegerLiteral(il) => il.token_literal(),
         }
     }
 }
@@ -95,6 +116,7 @@ impl std::fmt::Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expression::Identifier(i) => write!(f, "{}", i),
+            Expression::IntegerLiteral(il) => write!(f, "{}", il),
         }
     }
 }
@@ -122,7 +144,6 @@ impl std::fmt::Display for ExpressionStatement {
 }
 
 // Statement Enum
-
 #[derive(Debug)]
 pub enum Statement {
     Let(LetStatement),
@@ -151,7 +172,6 @@ impl std::fmt::Display for Statement {
 }
 
 // Program Main Struct of AST
-
 pub struct Program {
     pub statements: Vec<Statement>,
 }

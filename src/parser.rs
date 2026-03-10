@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Expression, ExpressionStatement, Identifier, LetStatement, Program, ReturnStatement,
-        Statement,
+        Expression, ExpressionStatement, Identifier, IntegerLiteral, LetStatement, Program,
+        ReturnStatement, Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -35,6 +35,7 @@ impl<'a> Parser<'a> {
             infix_parse_fns: HashMap::new(),
         };
         parser.register_prefix(TokenType::Ident, Parser::parse_identifier);
+        parser.register_prefix(TokenType::Int, Parser::parse_integer_literal);
         parser.next_token();
         parser.next_token();
         parser
@@ -101,6 +102,21 @@ impl<'a> Parser<'a> {
             token: self.cur_token.clone(),
             value: self.cur_token.literal.clone(),
         }))
+    }
+
+    pub fn parse_integer_literal(&mut self) -> Option<Expression> {
+        let value = self.cur_token.literal.parse::<i64>().ok();
+        match value {
+            Some(v) => Some(Expression::IntegerLiteral(IntegerLiteral {
+                token: self.cur_token.clone(),
+                value: v,
+            })),
+            None => {
+                let msg = format!("could not parse {:?} as integer", self.cur_token.literal);
+                self.errors.push(msg);
+                None
+            }
+        }
     }
 
     // LetStatement parser
@@ -179,6 +195,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
+        // this is the part that filters out the correct function
         let prefix_fn = self
             .prefix_parse_fns
             .get(&self.cur_token.token_type)
@@ -188,6 +205,9 @@ impl<'a> Parser<'a> {
             self.no_prefix_parse_fn_error();
             return None;
         }
+        // this is a bit confusing , cause we cast the parse_identifier into PrefixParseFn
+        // and how it works is if the deifined fn's parameter and return type is matched it get
+        // casted itself , at least that's what gemini said :))
         let left_exp = prefix_fn.unwrap()(self);
         left_exp
     }
@@ -202,7 +222,6 @@ impl<'a> Parser<'a> {
 }
 
 // Precedence constants
-
 pub enum Precedence {
     Lowest = 0,
     Equals = 1,      // ==
