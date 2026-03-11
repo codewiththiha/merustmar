@@ -1,5 +1,109 @@
 use crate::token::Token;
 
+// Expression(Root)
+
+#[derive(Debug)]
+pub enum Expression {
+    Identifier(Identifier),
+    IntegerLiteral(IntegerLiteral),
+    PrefixExpression(PrefixExpression),
+}
+
+impl Expression {
+    pub fn token_literal(&self) -> &str {
+        match self {
+            Expression::Identifier(i) => i.token_literal(),
+            Expression::IntegerLiteral(il) => il.token_literal(),
+            Expression::PrefixExpression(pe) => pe.token_literal(),
+        }
+    }
+}
+
+impl std::fmt::Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expression::Identifier(i) => write!(f, "{}", i),
+            Expression::IntegerLiteral(il) => write!(f, "{}", il),
+            Expression::PrefixExpression(pe) => write!(f, "{}", pe),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ExpressionStatement {
+    pub token: Token,
+    pub expression: Option<Expression>,
+}
+
+impl ExpressionStatement {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for ExpressionStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(expr) = &self.expression {
+            write!(f, "{}", expr)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+// Statement Enum
+#[derive(Debug)]
+pub enum Statement {
+    Let(LetStatement),
+    Return(ReturnStatement),
+    Expression(ExpressionStatement),
+}
+
+impl Statement {
+    pub fn token_literal(&self) -> &str {
+        match self {
+            Statement::Let(ls) => ls.token_literal(),
+            Statement::Return(rs) => rs.token_literal(),
+            Statement::Expression(es) => es.token_literal(),
+        }
+    }
+}
+
+impl std::fmt::Display for Statement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Statement::Let(ls) => write!(f, "{}", ls),
+            Statement::Return(rs) => write!(f, "{}", rs),
+            Statement::Expression(es) => write!(f, "{}", es),
+        }
+    }
+}
+
+// Program Main Struct of AST
+pub struct Program {
+    pub statements: Vec<Statement>,
+}
+
+impl Program {
+    pub fn token_literal(&self) -> &str {
+        if !self.statements.is_empty() {
+            return self.statements[0].token_literal();
+        } else {
+            ""
+        }
+    }
+}
+
+impl std::fmt::Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // way cleaner than using ref
+        for stmt in &self.statements {
+            write!(f, "{}", stmt)?;
+        }
+        Ok(())
+    }
+}
+
 // PrefixExpression
 
 #[derive(Debug)]
@@ -135,109 +239,5 @@ impl std::fmt::Display for LetStatement {
         }
         out.push('။');
         write!(f, "{}", out)
-    }
-}
-
-// Expression
-
-#[derive(Debug)]
-pub enum Expression {
-    Identifier(Identifier),
-    IntegerLiteral(IntegerLiteral),
-    PrefixExpression(PrefixExpression),
-}
-
-impl Expression {
-    pub fn token_literal(&self) -> &str {
-        match self {
-            Expression::Identifier(i) => i.token_literal(),
-            Expression::IntegerLiteral(il) => il.token_literal(),
-            Expression::PrefixExpression(pe) => pe.token_literal(),
-        }
-    }
-}
-
-impl std::fmt::Display for Expression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Expression::Identifier(i) => write!(f, "{}", i),
-            Expression::IntegerLiteral(il) => write!(f, "{}", il),
-            Expression::PrefixExpression(pe) => write!(f, "{}", pe),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ExpressionStatement {
-    pub token: Token,
-    pub expression: Option<Expression>,
-}
-
-impl ExpressionStatement {
-    pub fn token_literal(&self) -> &str {
-        &self.token.literal
-    }
-}
-
-impl std::fmt::Display for ExpressionStatement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(expr) = &self.expression {
-            write!(f, "{}", expr)
-        } else {
-            Ok(())
-        }
-    }
-}
-
-// Statement Enum
-#[derive(Debug)]
-pub enum Statement {
-    Let(LetStatement),
-    Return(ReturnStatement),
-    Expression(ExpressionStatement),
-}
-
-impl Statement {
-    pub fn token_literal(&self) -> &str {
-        match self {
-            Statement::Let(ls) => ls.token_literal(),
-            Statement::Return(rs) => rs.token_literal(),
-            Statement::Expression(es) => es.token_literal(),
-        }
-    }
-}
-
-impl std::fmt::Display for Statement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Statement::Let(ls) => write!(f, "{}", ls),
-            Statement::Return(rs) => write!(f, "{}", rs),
-            Statement::Expression(es) => write!(f, "{}", es),
-        }
-    }
-}
-
-// Program Main Struct of AST
-pub struct Program {
-    pub statements: Vec<Statement>,
-}
-
-impl Program {
-    pub fn token_literal(&self) -> &str {
-        if !self.statements.is_empty() {
-            return self.statements[0].token_literal();
-        } else {
-            ""
-        }
-    }
-}
-
-impl std::fmt::Display for Program {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // way cleaner than using ref
-        for stmt in &self.statements {
-            write!(f, "{}", stmt)?;
-        }
-        Ok(())
     }
 }
