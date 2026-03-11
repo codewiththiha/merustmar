@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Expression, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral, LetStatement,
-        PrefixExpression, Program, ReturnStatement, Statement,
+        BlockStatement, Boolean, Expression, ExpressionStatement, Identifier, IfExpression,
+        InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement,
+        Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -63,10 +64,18 @@ impl<'a> Parser<'a> {
             prefix_parse_fns: HashMap::new(),
             infix_parse_fns: HashMap::new(),
         };
+
+        // PrefixFns
         parser.register_prefix(TokenType::Ident, Parser::parse_identifier);
         parser.register_prefix(TokenType::Int, Parser::parse_integer_literal);
         parser.register_prefix(TokenType::Bang, Parser::parse_prefix_expression);
         parser.register_prefix(TokenType::Minus, Parser::parse_prefix_expression);
+        parser.register_prefix(TokenType::True, Parser::parse_boolean);
+        parser.register_prefix(TokenType::False, Parser::parse_boolean);
+        parser.register_prefix(TokenType::LParen, Parser::parse_grouped_expression);
+        parser.register_prefix(TokenType::If, Parser::parse_if_expression);
+
+        // InfixFns
         parser.register_infix(TokenType::Plus, Parser::parse_infix_expression);
         parser.register_infix(TokenType::Minus, Parser::parse_infix_expression);
         parser.register_infix(TokenType::Slash, Parser::parse_infix_expression);
@@ -248,6 +257,123 @@ impl<'a> Parser<'a> {
             token,
             return_value: None,
         }));
+    }
+
+    pub fn parse_boolean(&mut self) -> Option<Expression> {
+        Some(Expression::Boolean(Boolean {
+            token: self.cur_token.clone(),
+            value: self.cur_token_is(TokenType::True),
+        }))
+    }
+
+    pub fn parse_grouped_expression(&mut self) -> Option<Expression> {
+        self.next_token();
+        let expresssion = self.parse_expression(Precedence::Lowest);
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+        expresssion
+    }
+    //// Get Complicated
+    // pub fn parse_if_expression(&self) -> Option<Expression> {
+    //     // capture "if" token
+    //     let cur_token = self.cur_token;
+    //     let altr = None;
+    //     let cond_expr = ;
+    //
+    //     if !self.expect_peek(TokenType::LParen) {
+    //         return None;
+    //     }
+    //
+    //     self.next_token();
+    //     if let Some(e) = self.parse_expression(Precedence::Lowest) {
+    //         cond_expr = Box::new(Some(e));
+    //     }
+    //
+    //     if !self.expect_peek(TokenType::RParen) {
+    //         return None;
+    //     }
+    //
+    //     let cons_expr = self.parse_block_statement();
+    //
+    //     if self.peek_token_is(TokenType::Else) {
+    //         self.next_token();
+    //
+    //         if !self.expect_peek(TokenType::LBrace) {
+    //             return None;
+    //         }
+    //
+    //         altr = self.parse_block_statement();
+    //     }
+    //
+    //     Some(Expression::IfExpression(IfExpression {
+    //         token: cur_token,
+    //         condition: cond_expr,
+    //         consequence: cons_expr,
+    //         alternative: altr,
+    //     }))
+    // }
+
+    pub fn parse_if_expression(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+
+        if !self.expect_peek(TokenType::LParen) {
+            return None;
+        }
+
+        self.next_token();
+
+        // We use the `?` operator to safely extract the expression,
+        // or return None early if it fails to parse.
+        let condition = self.parse_expression(Precedence::Lowest);
+
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
+
+        let consequence = self.parse_block_statement();
+
+        let mut alternative = None;
+
+        if self.peek_token_is(TokenType::Else) {
+            self.next_token();
+
+            if !self.expect_peek(TokenType::LBrace) {
+                return None;
+            }
+
+            alternative = self.parse_block_statement();
+        }
+
+        Some(Expression::IfExpression(IfExpression {
+            token,
+            condition: condition.map(Box::new), // Box it here, not up top!
+            consequence,
+            alternative,
+        }))
+    }
+
+    pub fn parse_block_statement(&mut self) -> Option<BlockStatement> {
+        // capture { lbrace
+        let cur_token = self.cur_token.clone();
+        let mut statements = Vec::new();
+        self.next_token();
+
+        while !self.cur_token_is(TokenType::RBrace) && !self.peek_token_is(TokenType::Eof) {
+            if let Some(s) = self.parse_statement() {
+                statements.push(s);
+            }
+            self.next_token();
+        }
+        let pack_s = Some(statements);
+        Some(BlockStatement {
+            token: cur_token,
+            statements: pack_s,
+        })
     }
 
     // Helpers

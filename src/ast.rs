@@ -2,12 +2,14 @@ use crate::token::Token;
 
 // Expression(Root)
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
     PrefixExpression(PrefixExpression),
     InfixExpression(InfixExpression),
+    Boolean(Boolean),
+    IfExpression(IfExpression),
 }
 
 impl Expression {
@@ -17,6 +19,8 @@ impl Expression {
             Expression::IntegerLiteral(il) => il.token_literal(),
             Expression::PrefixExpression(pe) => pe.token_literal(),
             Expression::InfixExpression(ie) => ie.token_literal(),
+            Expression::Boolean(be) => be.token_literal(),
+            Expression::IfExpression(ie) => ie.token_literal(),
         }
     }
 }
@@ -28,11 +32,13 @@ impl std::fmt::Display for Expression {
             Expression::IntegerLiteral(il) => write!(f, "{}", il),
             Expression::PrefixExpression(pe) => write!(f, "{}", pe),
             Expression::InfixExpression(ie) => write!(f, "{}", ie),
+            Expression::Boolean(be) => write!(f, "{}", be),
+            Expression::IfExpression(ie) => write!(f, "{}", ie),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Option<Expression>,
@@ -55,7 +61,7 @@ impl std::fmt::Display for ExpressionStatement {
 }
 
 // Statement Enum
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
@@ -86,7 +92,6 @@ impl std::fmt::Display for Statement {
 pub struct Program {
     pub statements: Vec<Statement>,
 }
-
 impl Program {
     pub fn token_literal(&self) -> &str {
         if !self.statements.is_empty() {
@@ -107,9 +112,28 @@ impl std::fmt::Display for Program {
     }
 }
 
+// Boolean Expression
+#[derive(Debug, PartialEq, Clone)]
+pub struct Boolean {
+    pub token: Token,
+    pub value: bool,
+}
+
+impl Boolean {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for Boolean {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.token.literal)
+    }
+}
+
 // InfixExpression
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct InfixExpression {
     pub token: Token,
     pub right: Option<Box<Expression>>,
@@ -139,7 +163,7 @@ impl std::fmt::Display for InfixExpression {
 
 // PrefixExpression
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PrefixExpression {
     pub token: Token,
     pub right: Option<Box<Expression>>,
@@ -180,7 +204,7 @@ impl std::fmt::Display for PrefixExpression {
 }
 
 // IntegerLiteral
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IntegerLiteral {
     pub token: Token,
     pub value: i64,
@@ -199,7 +223,7 @@ impl std::fmt::Display for IntegerLiteral {
 }
 
 // Identifier
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Identifier {
     pub token: Token,
     pub value: String,
@@ -218,7 +242,7 @@ impl std::fmt::Display for Identifier {
 }
 // ReturnStatement
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReturnStatement {
     pub token: Token,
     pub return_value: Option<Expression>,
@@ -246,7 +270,7 @@ impl std::fmt::Display for ReturnStatement {
 
 // Let Statement
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LetStatement {
     pub token: Token,
     pub value: Option<Expression>,
@@ -272,5 +296,73 @@ impl std::fmt::Display for LetStatement {
         }
         out.push('။');
         write!(f, "{}", out)
+    }
+}
+
+// Block Statement
+#[derive(PartialEq, Debug, Clone)]
+pub struct BlockStatement {
+    pub token: Token,
+    pub statements: Option<Vec<Statement>>,
+}
+
+impl BlockStatement {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for BlockStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = String::new();
+
+        if let Some(statements) = &self.statements {
+            for (_, s) in statements.iter().enumerate() {
+                out.push_str(&s.to_string());
+            }
+        }
+
+        write!(f, "{}", out)
+    }
+}
+
+// If expression
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct IfExpression {
+    pub token: Token,
+    pub condition: Option<Box<Expression>>,
+    pub consequence: Option<BlockStatement>,
+    pub alternative: Option<BlockStatement>,
+}
+
+impl IfExpression {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for IfExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "if")?;
+
+        if let Some(ref condition) = self.condition {
+            write!(f, "({})", condition)?; // condition is &Box<Expression>, auto-derefs
+        }
+
+        write!(f, " ")?;
+
+        if let Some(ref consequence) = self.consequence {
+            write!(f, "{}", consequence)?;
+        }
+
+        if self.alternative.is_some() {
+            write!(f, "else")?;
+            if let Some(ref alternative) = self.alternative {
+                write!(f, "{}", alternative)?;
+            }
+        }
+
+        Ok(())
     }
 }
