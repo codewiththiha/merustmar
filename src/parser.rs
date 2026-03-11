@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Expression, ExpressionStatement, Identifier, IntegerLiteral, LetStatement,
+        Expression, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral, LetStatement,
         PrefixExpression, Program, ReturnStatement, Statement,
     },
     lexer::Lexer,
@@ -10,6 +10,7 @@ use crate::{
 };
 
 // Precedence constants
+#[derive(PartialOrd, PartialEq)]
 pub enum Precedence {
     Lowest = 0,
     Equals = 1,      // ==
@@ -66,6 +67,15 @@ impl<'a> Parser<'a> {
         parser.register_prefix(TokenType::Int, Parser::parse_integer_literal);
         parser.register_prefix(TokenType::Bang, Parser::parse_prefix_expression);
         parser.register_prefix(TokenType::Minus, Parser::parse_prefix_expression);
+        parser.register_infix(TokenType::Plus, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::Minus, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::Slash, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::Asterisk, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::Eq, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::NotEq, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::Lt, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::Gt, Parser::parse_infix_expression);
+
         parser.next_token();
         parser.next_token();
         parser
@@ -117,10 +127,23 @@ impl<'a> Parser<'a> {
             self.no_prefix_parse_fn_error();
             return None;
         }
-        // this is a bit confusing , cause we cast the parse_identifier into PrefixParseFn
-        // and how it works is if the deifined fn's parameter and return type is matched it get
-        // casted itself , at least that's what gemini said :))
-        let left_exp = prefix_fn.unwrap()(self);
+        let mut left_exp = prefix_fn.unwrap()(self);
+
+        while !self.peek_token_is(TokenType::Semicolon) && precedence < self.peek_precedence() {
+            // notice in this code we used peek_token to get infix function
+            let infix_fn = self
+                .infix_parse_fns
+                .get(&self.peek_token.token_type)
+                .copied();
+            if infix_fn.is_none() {
+                return left_exp;
+            }
+            self.next_token();
+            if let Some(le) = left_exp {
+                left_exp = infix_fn.unwrap()(self, le);
+            }
+        }
+
         left_exp
     }
 
@@ -145,6 +168,23 @@ impl<'a> Parser<'a> {
         Some(Expression::PrefixExpression(PrefixExpression {
             token,
             operator,
+            right,
+        }))
+    }
+
+    // Infix parser
+    pub fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let operator = self.cur_token.literal.clone();
+        let left = Some(left).map(Box::new);
+        let precedence = self.cur_precedence();
+        self.next_token();
+        let right = self.parse_expression(precedence).map(Box::new);
+
+        Some(Expression::InfixExpression(InfixExpression {
+            token,
+            operator,
+            left,
             right,
         }))
     }
@@ -182,7 +222,8 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        while self.cur_token.token_type != TokenType::Semicolon {
+        // fixed potential infinite loop
+        while !self.cur_token_is(TokenType::Semicolon) && !self.cur_token_is(TokenType::Eof) {
             self.next_token();
         }
 
@@ -198,7 +239,8 @@ impl<'a> Parser<'a> {
         let token = self.cur_token.clone();
         self.next_token();
 
-        while !self.cur_token_is(TokenType::Semicolon) || !self.cur_token_is(TokenType::Eof) {
+        // bug fixed
+        while !self.cur_token_is(TokenType::Semicolon) && !self.cur_token_is(TokenType::Eof) {
             self.next_token();
         }
 
@@ -267,5 +309,13 @@ impl<'a> Parser<'a> {
             self.cur_token.token_type
         );
         self.errors.push(msg);
+    }
+
+    pub fn peek_precedence(&self) -> Precedence {
+        Precedence::from_token_type(self.peek_token.token_type)
+    }
+
+    pub fn cur_precedence(&self) -> Precedence {
+        Precedence::from_token_type(self.cur_token.token_type)
     }
 }

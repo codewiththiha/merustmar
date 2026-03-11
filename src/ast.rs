@@ -7,6 +7,7 @@ pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
     PrefixExpression(PrefixExpression),
+    InfixExpression(InfixExpression),
 }
 
 impl Expression {
@@ -15,6 +16,7 @@ impl Expression {
             Expression::Identifier(i) => i.token_literal(),
             Expression::IntegerLiteral(il) => il.token_literal(),
             Expression::PrefixExpression(pe) => pe.token_literal(),
+            Expression::InfixExpression(ie) => ie.token_literal(),
         }
     }
 }
@@ -25,6 +27,7 @@ impl std::fmt::Display for Expression {
             Expression::Identifier(i) => write!(f, "{}", i),
             Expression::IntegerLiteral(il) => write!(f, "{}", il),
             Expression::PrefixExpression(pe) => write!(f, "{}", pe),
+            Expression::InfixExpression(ie) => write!(f, "{}", ie),
         }
     }
 }
@@ -101,6 +104,36 @@ impl std::fmt::Display for Program {
             write!(f, "{}", stmt)?;
         }
         Ok(())
+    }
+}
+
+// InfixExpression
+
+#[derive(Debug)]
+pub struct InfixExpression {
+    pub token: Token,
+    pub right: Option<Box<Expression>>,
+    pub left: Option<Box<Expression>>,
+    pub operator: String,
+}
+
+impl InfixExpression {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for InfixExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(")?;
+        if let Some(ref expr) = self.left {
+            write!(f, "{}", expr)?;
+        };
+        write!(f, " {} ", self.operator)?;
+        if let Some(ref expr) = self.right {
+            write!(f, "{}", expr)?;
+        }
+        write!(f, ")")
     }
 }
 
