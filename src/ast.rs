@@ -1,3 +1,5 @@
+use std::fmt::write;
+
 use crate::token::Token;
 
 // Expression(Root)
@@ -10,6 +12,7 @@ pub enum Expression {
     InfixExpression(InfixExpression),
     Boolean(Boolean),
     IfExpression(IfExpression),
+    FunctionLiteral(FunctionLiteral),
 }
 
 impl Expression {
@@ -21,6 +24,7 @@ impl Expression {
             Expression::InfixExpression(ie) => ie.token_literal(),
             Expression::Boolean(be) => be.token_literal(),
             Expression::IfExpression(ie) => ie.token_literal(),
+            Expression::FunctionLiteral(fl) => fl.token_literal(),
         }
     }
 }
@@ -34,6 +38,7 @@ impl std::fmt::Display for Expression {
             Expression::InfixExpression(ie) => write!(f, "{}", ie),
             Expression::Boolean(be) => write!(f, "{}", be),
             Expression::IfExpression(ie) => write!(f, "{}", ie),
+            Expression::FunctionLiteral(fl) => write!(f, "{}", fl),
         }
     }
 }
@@ -363,6 +368,55 @@ impl std::fmt::Display for IfExpression {
             }
         }
 
+        Ok(())
+    }
+}
+
+// Function Literal
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct FunctionLiteral {
+    pub token: Token,
+    pub body: Option<BlockStatement>,
+    pub parameters: Option<Vec<Identifier>>,
+}
+
+impl FunctionLiteral {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for FunctionLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        //// This cost heap allocations multiple times
+        // let mut statements = Vec::new();
+        // for (_, s) in self.parameters.iter().enumerate() {
+        //     if let Some(i) = s {
+        //         statements.push(i.to_string());
+        //     }
+        // }
+
+        write!(f, "{}", self.token_literal())?;
+        write!(f, "(")?;
+        // Just to print statements
+        // This is the most optimized pattern in rust so take notes!!
+        if let Some(params) = &self.parameters {
+            let mut params_iter = params.iter();
+
+            // take notes params_iter need mut cuz .next basically modifing (moving)
+            if let Some(first) = params_iter.next() {
+                write!(f, "{}", first.value)?;
+                for param in params_iter {
+                    write!(f, ", {}", param.value)?;
+                }
+            }
+        }
+
+        write!(f, ") ")?;
+        if let Some(b) = &self.body {
+            write!(f, "{}", b)?;
+        }
         Ok(())
     }
 }

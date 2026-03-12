@@ -1,4 +1,4 @@
-use crate::{
+pub use crate::{
     ast::{Expression, Statement},
     lexer::Lexer,
     parser::Parser,
@@ -685,4 +685,291 @@ fn test_if_expression() {
         "exp.Alternative was not nil. got={:?}",
         exp.alternative
     );
+}
+
+// ============================================================================
+// Function Literal Parsing Test (UPDATED for Option<Vec<Identifier>>)
+// ============================================================================
+
+#[test]
+fn test_function_literal_parsing() {
+    // Myanmar localized: ဖန်ရှင်(x, y) { x + y။ }
+    let input = "ဖန်ရှင်(x, y) { x + y။ }";
+
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program.Statements does not contain 1 statements. got={}",
+        program.statements.len()
+    );
+
+    // Check it's an ExpressionStatement
+    let stmt = match &program.statements[0] {
+        Statement::Expression(expr_stmt) => expr_stmt,
+        _ => panic!(
+            "program.Statements[0] is not ExpressionStatement. got={:?}",
+            program.statements[0]
+        ),
+    };
+
+    // Check it's a FunctionLiteral
+    let function = match &stmt.expression {
+        Some(Expression::FunctionLiteral(func)) => func,
+        _ => panic!(
+            "stmt.Expression is not FunctionLiteral. got={:?}",
+            stmt.expression
+        ),
+    };
+
+    // Check parameters count
+    assert!(
+        function.parameters.is_some(),
+        "function parameters should be Some"
+    );
+
+    let params = function.parameters.as_ref().unwrap();
+    assert_eq!(
+        params.len(),
+        2,
+        "function literal parameters wrong. want 2, got={}",
+        params.len()
+    );
+
+    // Check first parameter is "x"
+    assert_eq!(
+        params[0].value, "x",
+        "function parameter[0] is not 'x'. got={}",
+        params[0].value
+    );
+    assert_eq!(
+        params[0].token_literal(),
+        "x",
+        "function parameter[0].TokenLiteral is not 'x'. got={}",
+        params[0].token_literal()
+    );
+
+    // Check second parameter is "y"
+    assert_eq!(
+        params[1].value, "y",
+        "function parameter[1] is not 'y'. got={}",
+        params[1].value
+    );
+    assert_eq!(
+        params[1].token_literal(),
+        "y",
+        "function parameter[1].TokenLiteral is not 'y'. got={}",
+        params[1].token_literal()
+    );
+
+    // Check body has 1 statement
+    assert!(function.body.is_some(), "function body should be Some");
+
+    let body = function.body.as_ref().unwrap();
+    assert!(body.statements.is_some(), "body.statements should be Some");
+
+    let statements = body.statements.as_ref().unwrap();
+    assert_eq!(
+        statements.len(),
+        1,
+        "function.Body.Statements has not 1 statements. got={}",
+        statements.len()
+    );
+
+    // Check body statement is ExpressionStatement
+    let body_stmt = match &statements[0] {
+        Statement::Expression(expr_stmt) => expr_stmt,
+        _ => panic!(
+            "function body stmt is not ExpressionStatement. got={:?}",
+            statements[0]
+        ),
+    };
+
+    // Check body expression is infix (x + y)
+    match &body_stmt.expression {
+        Some(Expression::InfixExpression(infix)) => {
+            // Check operator
+            assert_eq!(
+                infix.operator, "+",
+                "body expression operator is not '+'. got={}",
+                infix.operator
+            );
+
+            // Check left is identifier "x"
+            match &infix.left {
+                Some(left_expr) => match left_expr.as_ref() {
+                    Expression::Identifier(ident) => {
+                        assert_eq!(
+                            ident.value, "x",
+                            "left expression is not 'x'. got={}",
+                            ident.value
+                        );
+                    }
+                    _ => panic!("left expression is not Identifier"),
+                },
+                None => panic!("left expression is None"),
+            }
+
+            // Check right is identifier "y"
+            match &infix.right {
+                Some(right_expr) => match right_expr.as_ref() {
+                    Expression::Identifier(ident) => {
+                        assert_eq!(
+                            ident.value, "y",
+                            "right expression is not 'y'. got={}",
+                            ident.value
+                        );
+                    }
+                    _ => panic!("right expression is not Identifier"),
+                },
+                None => panic!("right expression is None"),
+            }
+        }
+        _ => panic!("body expression is not InfixExpression"),
+    }
+}
+
+// ============================================================================
+// Additional Test: Function with No Parameters
+// ============================================================================
+
+#[test]
+fn test_function_literal_no_parameters() {
+    // Myanmar localized: ဖန်ရှင်() { 5။ }
+    let input = "ဖန်ရှင်() { 5။ }";
+
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    let stmt = match &program.statements[0] {
+        Statement::Expression(expr_stmt) => expr_stmt,
+        _ => panic!("Not ExpressionStatement"),
+    };
+
+    let function = match &stmt.expression {
+        Some(Expression::FunctionLiteral(func)) => func,
+        _ => panic!("Not FunctionLiteral"),
+    };
+
+    // Depending on your parser implementation
+    if let Some(params) = &function.parameters {
+        assert_eq!(
+            params.len(),
+            0,
+            "function with no parameters should have empty Vec"
+        );
+    }
+    // Or if your parser returns None for no parameters:
+    // assert!(function.parameters.is_none(), "parameters should be None");
+}
+
+// ============================================================================
+// Function Parameter Parsing Test (NEW!)
+// ============================================================================
+
+#[test]
+fn test_function_parameter_parsing() {
+    // Table-driven test data (Myanmar localized)
+    struct ParamTest {
+        input: &'static str,
+        expected_params: Vec<&'static str>,
+    }
+
+    let tests = vec![
+        ParamTest {
+            input: "ဖန်ရှင်() { }",
+            expected_params: vec![],
+        },
+        ParamTest {
+            input: "ဖန်ရှင်(x) { }",
+            expected_params: vec!["x"],
+        },
+        ParamTest {
+            input: "ဖန်ရှင်(x, y, z) { }",
+            expected_params: vec!["x", "y", "z"],
+        },
+    ];
+
+    for (i, tt) in tests.iter().enumerate() {
+        let mut lexer = Lexer::new(tt.input);
+        let mut parser = Parser::new(&mut lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        // Check statement count
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "test[{}] - program.Statements does not contain 1 statements. got={}",
+            i,
+            program.statements.len()
+        );
+
+        // Check it's an ExpressionStatement
+        let stmt = match &program.statements[0] {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!(
+                "test[{}] - program.Statements[0] is not ExpressionStatement. got={:?}",
+                i, program.statements[0]
+            ),
+        };
+
+        // Check it's a FunctionLiteral
+        let function = match &stmt.expression {
+            Some(Expression::FunctionLiteral(func)) => func,
+            _ => panic!(
+                "test[{}] - stmt.Expression is not FunctionLiteral. got={:?}",
+                i, stmt.expression
+            ),
+        };
+
+        // Check parameters count
+        let actual_params = if let Some(ref params) = function.parameters {
+            params.len()
+        } else {
+            0
+        };
+
+        assert_eq!(
+            actual_params,
+            tt.expected_params.len(),
+            "test[{}] - length parameters wrong. want {}, got={}",
+            i,
+            tt.expected_params.len(),
+            actual_params
+        );
+
+        // Check each parameter name
+        if let Some(ref params) = function.parameters {
+            for (j, expected_ident) in tt.expected_params.iter().enumerate() {
+                if j < params.len() {
+                    // Check parameter value
+                    assert_eq!(
+                        params[j].value, *expected_ident,
+                        "test[{}] - parameter[{}] not '{}'. got='{}'",
+                        i, j, expected_ident, params[j].value
+                    );
+                    // Check parameter token literal
+                    assert_eq!(
+                        params[j].token_literal(),
+                        *expected_ident,
+                        "test[{}] - parameter[{}].TokenLiteral not '{}'. got='{}'",
+                        i,
+                        j,
+                        expected_ident,
+                        params[j].token_literal()
+                    );
+                }
+            }
+        }
+    }
 }

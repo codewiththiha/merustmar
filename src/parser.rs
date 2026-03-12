@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BlockStatement, Boolean, Expression, ExpressionStatement, Identifier, IfExpression,
-        InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement,
-        Statement,
+        BlockStatement, Boolean, Expression, ExpressionStatement, FunctionLiteral, Identifier,
+        IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
+        ReturnStatement, Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -74,6 +74,7 @@ impl<'a> Parser<'a> {
         parser.register_prefix(TokenType::False, Parser::parse_boolean);
         parser.register_prefix(TokenType::LParen, Parser::parse_grouped_expression);
         parser.register_prefix(TokenType::If, Parser::parse_if_expression);
+        parser.register_prefix(TokenType::Function, Parser::parse_function_literal);
 
         // InfixFns
         parser.register_infix(TokenType::Plus, Parser::parse_infix_expression);
@@ -374,6 +375,52 @@ impl<'a> Parser<'a> {
             token: cur_token,
             statements: pack_s,
         })
+    }
+
+    pub fn parse_function_literal(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        if !self.expect_peek(TokenType::LParen) {
+            return None;
+        }
+        let parameters = self.parse_function_parameters();
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
+        let body = self.parse_block_statement();
+        Some(Expression::FunctionLiteral(FunctionLiteral {
+            token,
+            parameters,
+            body,
+        }))
+    }
+
+    pub fn parse_function_parameters(&mut self) -> Option<Vec<Identifier>> {
+        let mut identifiers = Vec::new();
+        if self.peek_token_is(TokenType::RParen) {
+            self.next_token();
+            return None;
+        }
+        // this skip the lparen and get grab on the first real param
+        self.next_token();
+        identifiers.push(Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        });
+
+        while self.peek_token_is(TokenType::Comma) {
+            self.next_token();
+            self.next_token();
+            identifiers.push(Identifier {
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            });
+        }
+
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+
+        Some(identifiers)
     }
 
     // Helpers
