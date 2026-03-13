@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BlockStatement, Boolean, Expression, ExpressionStatement, FunctionLiteral, Identifier,
-        IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
-        ReturnStatement, Statement,
+        BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement, FunctionLiteral,
+        Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression,
+        Program, ReturnStatement, Statement,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -85,6 +85,7 @@ impl<'a> Parser<'a> {
         parser.register_infix(TokenType::NotEq, Parser::parse_infix_expression);
         parser.register_infix(TokenType::Lt, Parser::parse_infix_expression);
         parser.register_infix(TokenType::Gt, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::LParen, Parser::parse_call_expression);
 
         parser.next_token();
         parser.next_token();
@@ -232,31 +233,30 @@ impl<'a> Parser<'a> {
             return None;
         }
 
+        self.next_token();
+        let value = self.parse_expression(Precedence::Lowest);
+
         // fixed potential infinite loop
-        while !self.cur_token_is(TokenType::Semicolon) && !self.cur_token_is(TokenType::Eof) {
+        if self.peek_token_is(TokenType::Semicolon) {
             self.next_token();
         }
 
-        Some(Statement::Let(LetStatement {
-            token,
-            name,
-            value: None,
-        }))
+        Some(Statement::Let(LetStatement { token, name, value }))
     }
 
     // ReturnStatement Parser
     pub fn parse_return_statement(&mut self) -> Option<Statement> {
         let token = self.cur_token.clone();
         self.next_token();
+        let return_value = self.parse_expression(Precedence::Lowest);
 
-        // bug fixed
-        while !self.cur_token_is(TokenType::Semicolon) && !self.cur_token_is(TokenType::Eof) {
+        if self.peek_token_is(TokenType::Semicolon) {
             self.next_token();
         }
 
         return Some(Statement::Return(ReturnStatement {
             token,
-            return_value: None,
+            return_value,
         }));
     }
 
@@ -421,6 +421,48 @@ impl<'a> Parser<'a> {
         }
 
         Some(identifiers)
+    }
+
+    // ParseCallExpression
+    pub fn parse_call_expression(
+        &mut self,
+        // in case you wonder, the function parameter get from the leftexp in infix_parse_fn
+        // (leftexp become function arg for this case)
+        function: Expression,
+    ) -> Option<Expression> {
+        Some(Expression::CallExpression(CallExpression {
+            token: self.cur_token.clone(),
+            function: Some(Box::new(function)),
+            arguments: self.parse_call_arguments(),
+        }))
+    }
+
+    pub fn parse_call_arguments(&mut self) -> Option<Vec<Expression>> {
+        let mut args = Vec::new();
+        // for the function call without arguments like doSomething();
+        if self.peek_token_is(TokenType::RParen) {
+            self.next_token();
+            return Some(args);
+        }
+
+        self.next_token();
+        if let Some(expr) = self.parse_expression(Precedence::Lowest) {
+            args.push(expr);
+        }
+        // for multiple args
+        while self.peek_token_is(TokenType::Comma) {
+            self.next_token();
+            self.next_token();
+            if let Some(expr) = self.parse_expression(Precedence::Lowest) {
+                args.push(expr);
+            }
+        }
+
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+
+        return Some(args);
     }
 
     // Helpers
