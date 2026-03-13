@@ -584,6 +584,19 @@ fn test_operator_precedence_parsing() {
             input: "!(မှန် == မှန်)",
             expected: "(!(မှန် == မှန်))",
         },
+        // ← NEW: Function call precedence tests (from Go)
+        PrecedenceTest {
+            input: "a + add(b * c) + d",
+            expected: "((a + add((b * c))) + d)",
+        },
+        PrecedenceTest {
+            input: "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+            expected: "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+        },
+        PrecedenceTest {
+            input: "add(a + b + c * d / f + g)",
+            expected: "add((((a + b) + ((c * d) / f)) + g))",
+        },
     ];
 
     for (i, tt) in tests.iter().enumerate() {
@@ -969,6 +982,164 @@ fn test_function_parameter_parsing() {
                         params[j].token_literal()
                     );
                 }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Call Expression Parsing Test (NEW!)
+// ============================================================================
+
+#[test]
+fn test_call_expression_parsing() {
+    // Myanmar localized: add(1, 2 * 3, 4 + 5)။
+    let input = "add(1, 2 * 3, 4 + 5)။";
+
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    // Check statement count
+    assert_eq!(
+        program.statements.len(),
+        1,
+        "program.Statements does not contain 1 statements. got={}",
+        program.statements.len()
+    );
+
+    // Check it's an ExpressionStatement
+    let stmt = match &program.statements[0] {
+        Statement::Expression(expr_stmt) => expr_stmt,
+        _ => panic!(
+            "stmt is not ExpressionStatement. got={:?}",
+            program.statements[0]
+        ),
+    };
+
+    // Check it's a CallExpression
+    let call_exp = match &stmt.expression {
+        Some(Expression::CallExpression(call)) => call,
+        _ => panic!(
+            "stmt.Expression is not CallExpression. got={:?}",
+            stmt.expression
+        ),
+    };
+
+    // Check function is identifier "add"
+    match &call_exp.function {
+        Some(func_expr) => {
+            if !test_identifier(func_expr.as_ref(), "add") {
+                panic!("function is not identifier 'add'");
+            }
+        }
+        None => panic!("function is None"),
+    }
+
+    // Check arguments count
+    assert!(call_exp.arguments.is_some(), "arguments should be Some");
+
+    let args = call_exp.arguments.as_ref().unwrap();
+    assert_eq!(
+        args.len(),
+        3,
+        "wrong length of arguments. got={}",
+        args.len()
+    );
+
+    // Check first argument is integer literal 1
+    assert!(
+        test_literal_expression(&args[0], &LiteralExpected::Int(1)),
+        "argument[0] is not integer literal 1"
+    );
+
+    // Check second argument is infix expression (2 * 3)
+    assert!(
+        test_infix_expression(
+            &args[1],
+            &LiteralExpected::Int(2),
+            "*",
+            &LiteralExpected::Int(3)
+        ),
+        "argument[1] is not infix expression 2 * 3"
+    );
+
+    // Check third argument is infix expression (4 + 5)
+    assert!(
+        test_infix_expression(
+            &args[2],
+            &LiteralExpected::Int(4),
+            "+",
+            &LiteralExpected::Int(5)
+        ),
+        "argument[2] is not infix expression 4 + 5"
+    );
+}
+
+// ============================================================================
+// Let Statements with Values Test (NEW!)
+// ============================================================================
+
+#[test]
+fn test_let_statements_with_values() {
+    // Table-driven test data (Myanmar localized)
+    struct LetTest {
+        input: &'static str,
+        expected_identifier: &'static str,
+        expected_value: LiteralExpected,
+    }
+
+    let tests = vec![
+        LetTest {
+            input: "ထား x = 5။",
+            expected_identifier: "x",
+            expected_value: LiteralExpected::Int(5),
+        },
+        LetTest {
+            input: "ထား y = မှန်။",
+            expected_identifier: "y",
+            expected_value: LiteralExpected::Bool(true),
+        },
+        LetTest {
+            input: "ထား foobar = y။",
+            expected_identifier: "foobar",
+            expected_value: LiteralExpected::String("y".to_string()),
+        },
+    ];
+
+    for (i, tt) in tests.iter().enumerate() {
+        let mut lexer = Lexer::new(tt.input);
+        let mut parser = Parser::new(&mut lexer);
+        let program = parser.parse_program();
+
+        check_parser_errors(&parser);
+
+        // Check statement count
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "test[{}] - program.Statements does not contain 1 statements. got={}",
+            i,
+            program.statements.len()
+        );
+
+        let stmt = &program.statements[0];
+
+        // Check let statement identifier
+        if !test_let_statement(stmt, tt.expected_identifier) {
+            panic!("test[{}] - let statement test failed", i);
+        }
+
+        // Check the value expression
+        if let Statement::Let(let_stmt) = stmt {
+            if let Some(ref value) = let_stmt.value {
+                if !test_literal_expression(value, &tt.expected_value) {
+                    panic!("test[{}] - value expression test failed", i);
+                }
+            } else {
+                panic!("test[{}] - let statement value is None", i);
             }
         }
     }

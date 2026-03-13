@@ -1,5 +1,3 @@
-use std::fmt::write;
-
 use crate::token::Token;
 
 // Expression(Root)
@@ -13,6 +11,7 @@ pub enum Expression {
     Boolean(Boolean),
     IfExpression(IfExpression),
     FunctionLiteral(FunctionLiteral),
+    CallExpression(CallExpression),
 }
 
 impl Expression {
@@ -25,6 +24,7 @@ impl Expression {
             Expression::Boolean(be) => be.token_literal(),
             Expression::IfExpression(ie) => ie.token_literal(),
             Expression::FunctionLiteral(fl) => fl.token_literal(),
+            Expression::CallExpression(ce) => ce.token_literal(),
         }
     }
 }
@@ -39,6 +39,7 @@ impl std::fmt::Display for Expression {
             Expression::Boolean(be) => write!(f, "{}", be),
             Expression::IfExpression(ie) => write!(f, "{}", ie),
             Expression::FunctionLiteral(fl) => write!(f, "{}", fl),
+            Expression::CallExpression(ce) => write!(f, "{}", ce),
         }
     }
 }
@@ -111,6 +112,7 @@ impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // way cleaner than using ref
         for stmt in &self.statements {
+            // we'll see later
             write!(f, "{}", stmt)?;
         }
         Ok(())
@@ -418,5 +420,39 @@ impl std::fmt::Display for FunctionLiteral {
             write!(f, "{}", b)?;
         }
         Ok(())
+    }
+}
+
+// CallExpression
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct CallExpression {
+    pub arguments: Option<Vec<Expression>>,
+    pub function: Option<Box<Expression>>,
+    pub token: Token,
+}
+
+impl CallExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for CallExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(function) = &self.function {
+            write!(f, "{}", function)?;
+        }
+        write! {f , "("}?;
+        if let Some(args) = &self.arguments {
+            let mut args_iterator = args.iter();
+            if let Some(first) = args_iterator.next() {
+                write!(f, "{}", first)?;
+            }
+            for (_, arg) in args_iterator.enumerate() {
+                write!(f, ", {}", arg)?;
+            }
+        }
+        write!(f, ")")
     }
 }
