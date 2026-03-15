@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 
+use crate::environment::Environment;
 use crate::evaluator;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -25,6 +26,8 @@ pub fn start() {
         // Parse the input
         let mut lexer = Lexer::new(&input);
         let mut parser = Parser::new(&mut lexer);
+        let mut env = Environment::new();
+
         let program = parser.parse_program();
 
         // Check for parser errors
@@ -34,7 +37,7 @@ pub fn start() {
             continue;
         }
 
-        let result = evaluator::eval_program(&program);
+        let result = evaluator::eval_program(&program, &mut env);
 
         if let Some(obj) = result {
             println!("{}", obj.inspect());

@@ -72,6 +72,7 @@ pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
     Expression(ExpressionStatement),
+    Block(BlockStatement),
 }
 
 impl Statement {
@@ -80,6 +81,7 @@ impl Statement {
             Statement::Let(ls) => ls.token_literal(),
             Statement::Return(rs) => rs.token_literal(),
             Statement::Expression(es) => es.token_literal(),
+            Statement::Block(bs) => bs.token_literal(),
         }
     }
 }
@@ -90,6 +92,7 @@ impl std::fmt::Display for Statement {
             Statement::Let(ls) => write!(f, "{}", ls),
             Statement::Return(rs) => write!(f, "{}", rs),
             Statement::Expression(es) => write!(f, "{}", es),
+            Statement::Block(bs) => write!(f, "{}", bs),
         }
     }
 }

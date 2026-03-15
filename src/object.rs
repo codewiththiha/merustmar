@@ -3,6 +3,8 @@ pub enum ObjectType {
     Integer,
     Boolean,
     Null,
+    ReturnValue,
+    ErrorObj,
 }
 
 impl std::fmt::Display for ObjectType {
@@ -11,6 +13,8 @@ impl std::fmt::Display for ObjectType {
             ObjectType::Integer => write!(f, "INTEGER"),
             ObjectType::Boolean => write!(f, "BOOLEAN"),
             ObjectType::Null => write!(f, "NULL"),
+            ObjectType::ReturnValue => write!(f, "RETURN_VALUE"),
+            ObjectType::ErrorObj => write!(f, "ERROR"),
         }
     }
 }
@@ -19,6 +23,8 @@ impl std::fmt::Display for ObjectType {
 pub enum Object {
     Integer(i64),
     Boolean(bool),
+    ReturnValue(Box<Object>),
+    ErrorObj(String),
     Null,
 }
 
@@ -28,6 +34,8 @@ impl Object {
             Object::Integer(_) => ObjectType::Integer,
             Object::Boolean(_) => ObjectType::Boolean,
             Object::Null => ObjectType::Null,
+            Object::ReturnValue(_) => ObjectType::ReturnValue,
+            Object::ErrorObj(_) => ObjectType::ErrorObj,
         }
     }
 
@@ -36,6 +44,8 @@ impl Object {
             Object::Integer(i) => i.to_string(),
             Object::Boolean(b) => b.to_string(),
             Object::Null => "null".to_string(),
+            Object::ReturnValue(o) => o.to_string(),
+            Object::ErrorObj(e) => e.to_string(),
         }
     }
 }

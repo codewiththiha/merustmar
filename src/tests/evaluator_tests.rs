@@ -1,4 +1,4 @@
-use crate::{evaluator, lexer::Lexer, object::Object, parser::Parser};
+use crate::{environment::Environment, evaluator, lexer::Lexer, object::Object, parser::Parser};
 
 // ============================================================================
 // Helper: test_eval
@@ -7,6 +7,7 @@ use crate::{evaluator, lexer::Lexer, object::Object, parser::Parser};
 fn test_eval(input: &str) -> Option<Object> {
     let mut lexer = Lexer::new(input);
     let mut parser = Parser::new(&mut lexer);
+    let mut env = Environment::new();
     let program = parser.parse_program();
 
     let errors = parser.return_errors();
@@ -15,7 +16,7 @@ fn test_eval(input: &str) -> Option<Object> {
         return None;
     }
 
-    evaluator::eval_program(&program)
+    evaluator::eval_program(&program, &mut env)
 }
 
 // ============================================================================
@@ -329,6 +330,168 @@ fn test_minus_operator() {
         let evaluated = test_eval(tt.input);
 
         if !test_integer_object(&evaluated, tt.expected) {
+            panic!("test[{}] failed for input '{}'", i, tt.input);
+        }
+    }
+}
+
+// ============================================================================
+// Test: If-Else Expressions
+// ============================================================================
+
+#[test]
+fn test_return_statements() {
+    struct Test {
+        input: &'static str,
+        expected: ExpectedValue,
+    }
+
+    enum ExpectedValue {
+        Integer(i64),
+        Boolean(bool),
+    }
+
+    let tests = vec![
+        Test {
+            input: "ဒါယူ 10။",
+            expected: ExpectedValue::Integer(10),
+        },
+        Test {
+            input: "ဒါယူ 5 + 5။",
+            expected: ExpectedValue::Integer(10),
+        },
+        Test {
+            input: "ဒါယူ 2 * 5။",
+            expected: ExpectedValue::Integer(10),
+        },
+        Test {
+            input: "ဒါယူ 10။\nဒါယူ 20။",
+            expected: ExpectedValue::Integer(10),
+        },
+        Test {
+            input: "ဒါယူ 2 > 1။",
+            expected: ExpectedValue::Boolean(true),
+        },
+        // Nested if with return
+        Test {
+            input: "တကယ်လို့ (10 > 1) {
+                တကယ်လို့ (10 > 1) {
+                    ဒါယူ 10။
+                }
+                ဒါယူ 1။
+            }",
+            expected: ExpectedValue::Integer(10),
+        },
+    ];
+
+    for (i, tt) in tests.iter().enumerate() {
+        let evaluated = test_eval(tt.input);
+
+        match &tt.expected {
+            ExpectedValue::Integer(expected_val) => match evaluated {
+                Some(Object::Integer(value)) => {
+                    if value != *expected_val {
+                        panic!(
+                            "test[{}] - wrong value. got={}, want={}",
+                            i, value, expected_val
+                        );
+                    }
+                }
+                other => {
+                    panic!("test[{}] - expected Integer, got={:?}", i, other);
+                }
+            },
+            ExpectedValue::Boolean(expected_val) => match evaluated {
+                Some(Object::Boolean(value)) => {
+                    if value != *expected_val {
+                        panic!(
+                            "test[{}] - wrong value. got={}, want={}",
+                            i, value, expected_val
+                        );
+                    }
+                }
+                other => {
+                    panic!("test[{}] - expected Boolean, got={:?}", i, other);
+                }
+            },
+        }
+    }
+}
+
+fn test_error_object(obj: &Option<Object>, expected_message: &str) -> bool {
+    match obj {
+        Some(Object::ErrorObj(message)) => {
+            if message != expected_message {
+                eprintln!(
+                    "error message mismatch. got={}, want={}",
+                    message, expected_message
+                );
+                return false;
+            }
+            true
+        }
+        Some(other) => {
+            eprintln!("object is not ErrorObj. got={:?}", other);
+            false
+        }
+        None => {
+            eprintln!("object is None, expected ErrorObj");
+            false
+        }
+    }
+}
+
+// ============================================================================
+// Test: Error Handling
+// ============================================================================
+
+#[test]
+fn test_error_handling() {
+    struct Test {
+        input: &'static str,
+        expected_message: &'static str,
+    }
+
+    let tests = vec![
+        Test {
+            input: "5 + မှန်။",
+            expected_message: "type mismatch: INTEGER + BOOLEAN",
+        },
+        Test {
+            input: "5 + မှန်။ 5။",
+            expected_message: "type mismatch: INTEGER + BOOLEAN",
+        },
+        Test {
+            input: "-မှန်။",
+            expected_message: "unknown operator: -BOOLEAN",
+        },
+        Test {
+            input: "မှန် + မှား။",
+            expected_message: "unknown operator: BOOLEAN + BOOLEAN",
+        },
+        Test {
+            input: "5။ မှန် + မှား။ 5။",
+            expected_message: "unknown operator: BOOLEAN + BOOLEAN",
+        },
+        Test {
+            input: "တကယ်လို့ (10 > 1) { မှန် + မှား။ }",
+            expected_message: "unknown operator: BOOLEAN + BOOLEAN",
+        },
+        Test {
+            input: "တကယ်လို့ (10 > 1) {
+                တကယ်လို့ (10 > 1) {
+                    ဒါယူ မှန် + မှား။
+                }
+                ဒါယူ 1။
+            }",
+            expected_message: "unknown operator: BOOLEAN + BOOLEAN",
+        },
+    ];
+
+    for (i, tt) in tests.iter().enumerate() {
+        let evaluated = test_eval(tt.input);
+
+        if !test_error_object(&evaluated, tt.expected_message) {
             panic!("test[{}] failed for input '{}'", i, tt.input);
         }
     }
