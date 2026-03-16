@@ -19,8 +19,9 @@ impl Environment {
         self.store.get(name).cloned()
     }
 
-    pub fn set(&mut self, name: String, val: Object) -> Object {
+    pub fn set(&mut self, name: String, val: Object) {
+        // since this return value is rarely use already
         self.store.insert(name, val.clone());
-        val
     }
 }
+
