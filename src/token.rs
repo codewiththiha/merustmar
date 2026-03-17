@@ -57,10 +57,10 @@ impl Token {
     pub fn lookup_ident(ident: &str) -> TokenType {
         match ident {
             "ထား" => TokenType::Let,
-            "cook" => TokenType::Function,
+            "ဖန်ရှင်" => TokenType::Function,
             "တကယ်လို့" => TokenType::If,
             "မဟုတ်ရင်" => TokenType::Else,
-            "take_this" => TokenType::Return,
+            "ဒါယူ" => TokenType::Return,
             "မှန်" => TokenType::True,
             "မှား" => TokenType::False,
             _ => TokenType::Ident,
