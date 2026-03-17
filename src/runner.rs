@@ -14,13 +14,11 @@ pub fn run_file(path: &str) {
 
     let contents = fs::read_to_string(path).expect("Could not read file");
 
-    // Parse the file
     let mut lexer = Lexer::new(&contents);
     let mut parser = Parser::new(&mut lexer);
     let program = parser.parse_program();
-    let mut env = Environment::new();
+    let env = Environment::new();
 
-    // Check for parser errors
     let errors = parser.return_errors();
     if !errors.is_empty() {
         let mut stdout = io::stdout();
@@ -28,7 +26,7 @@ pub fn run_file(path: &str) {
         return;
     }
 
-    let result = evaluator::eval_program(&program, &mut env);
+    let result = evaluator::eval_program(&program, &env);
 
     if let Some(obj) = result {
         println!("{}", obj.inspect());
@@ -41,3 +39,4 @@ fn print_parser_errors(out: &mut impl Write, errors: &[String]) {
         eprintln!("\t{}", msg);
     }
 }
+

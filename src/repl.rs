@@ -11,38 +11,33 @@ pub fn start() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut input = String::new();
+    let env = Environment::new(); // ← outside the loop so state persists!
 
-    // println!("Hello! This is the Merustmar programming language!");
-    // println!("Feel free to type in commands (Ctrl+D to exit)");
     loop {
         print!("{}", PROMPT);
         stdout.flush().unwrap();
 
         input.clear();
         if stdin.read_line(&mut input).unwrap() == 0 {
-            break; // EOF (Ctrl+D)
+            break;
         }
 
-        // Parse the input
         let mut lexer = Lexer::new(&input);
         let mut parser = Parser::new(&mut lexer);
-        let mut env = Environment::new();
 
         let program = parser.parse_program();
 
-        // Check for parser errors
         let errors = parser.return_errors();
         if !errors.is_empty() {
             print_parser_errors(&mut stdout, errors);
             continue;
         }
 
-        let result = evaluator::eval_program(&program, &mut env);
+        let result = evaluator::eval_program(&program, &env);
 
         if let Some(obj) = result {
             println!("{}", obj.inspect());
         }
-        // If None, don't print anything (statement had no value)
     }
 }
 
@@ -52,3 +47,4 @@ fn print_parser_errors(out: &mut impl Write, errors: &[String]) {
         writeln!(out, "\t{}", msg).unwrap();
     }
 }
+

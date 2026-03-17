@@ -7,7 +7,7 @@ use crate::{environment::Environment, evaluator, lexer::Lexer, object::Object, p
 fn test_eval(input: &str) -> Option<Object> {
     let mut lexer = Lexer::new(input);
     let mut parser = Parser::new(&mut lexer);
-    let mut env = Environment::new();
+    let env = Environment::new(); // returns Rc<RefCell<Environment>>
     let program = parser.parse_program();
 
     let errors = parser.return_errors();
@@ -16,7 +16,7 @@ fn test_eval(input: &str) -> Option<Object> {
         return None;
     }
 
-    evaluator::eval_program(&program, &mut env)
+    evaluator::eval_program(&program, &env) // pass &Rc<...>
 }
 
 // ============================================================================
@@ -492,6 +492,83 @@ fn test_error_handling() {
         let evaluated = test_eval(tt.input);
 
         if !test_error_object(&evaluated, tt.expected_message) {
+            panic!("test[{}] failed for input '{}'", i, tt.input);
+        }
+    }
+}
+
+#[test]
+fn test_function_object() {
+    let input = "ဖန်ရှင်(x) { x + 2။ }။";
+    let evaluated = test_eval(input);
+
+    match evaluated {
+        Some(Object::Function(func)) => {
+            assert_eq!(
+                func.parameters.len(),
+                1,
+                "function has wrong number of parameters. got={}",
+                func.parameters.len()
+            );
+
+            assert_eq!(
+                func.parameters[0].to_string(),
+                "x",
+                "parameter is not 'x'. got={}",
+                func.parameters[0]
+            );
+
+            let expected_body = "(x + 2)";
+            assert_eq!(
+                func.body.to_string(),
+                expected_body,
+                "body is not '{}'. got={}",
+                expected_body,
+                func.body
+            );
+        }
+        other => panic!("object is not Function. got={:?}", other),
+    }
+}
+
+#[test]
+fn test_function_application() {
+    struct Test {
+        input: &'static str,
+        expected: i64,
+    }
+
+    let tests = vec![
+        Test {
+            input: "ထား identity = ဖန်ရှင်(x) { x။ }။ identity(5)။",
+            expected: 5,
+        },
+        Test {
+            input: "ထား identity = ဖန်ရှင်(x) { ဒါယူ x။ }။ identity(5)။",
+            expected: 5,
+        },
+        Test {
+            input: "ထား double = ဖန်ရှင်(x) { x * 2။ }။ double(5)။",
+            expected: 10,
+        },
+        Test {
+            input: "ထား add = ဖန်ရှင်(x, y) { x + y။ }။ add(5, 5)။",
+            expected: 10,
+        },
+        Test {
+            input: "ထား add = ဖန်ရှင်(x, y) { x + y။ }။ add(5 + 5, add(5, 5))။",
+            expected: 20,
+        },
+        Test {
+            input: "ဖန်ရှင်(x) { x။ }(5)",
+            expected: 5,
+        },
+    ];
+
+    for (i, tt) in tests.iter().enumerate() {
+        let evaluated = test_eval(tt.input);
+
+        if !test_integer_object(&evaluated, tt.expected) {
             panic!("test[{}] failed for input '{}'", i, tt.input);
         }
     }

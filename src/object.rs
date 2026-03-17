@@ -1,3 +1,24 @@
+use std::{cell::RefCell, rc::Rc};
+
+use crate::{
+    ast::{BlockStatement, Identifier},
+    environment::Environment,
+};
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub parameters: Vec<Identifier>,
+    pub body: BlockStatement,
+    pub env: Rc<RefCell<Environment>>,
+}
+
+// Manual PartialEq — skip env to avoid Rc cycle stack overflow
+impl PartialEq for Function {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters == other.parameters && self.body == other.body
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectType {
     Integer,
@@ -5,6 +26,7 @@ pub enum ObjectType {
     Null,
     ReturnValue,
     ErrorObj,
+    Function,
 }
 
 impl std::fmt::Display for ObjectType {
@@ -15,6 +37,7 @@ impl std::fmt::Display for ObjectType {
             ObjectType::Null => write!(f, "NULL"),
             ObjectType::ReturnValue => write!(f, "RETURN_VALUE"),
             ObjectType::ErrorObj => write!(f, "ERROR"),
+            ObjectType::Function => write!(f, "FUNCTION"),
         }
     }
 }
@@ -26,6 +49,7 @@ pub enum Object {
     ReturnValue(Box<Object>),
     ErrorObj(String),
     Null,
+    Function(Function),
 }
 
 impl Object {
@@ -36,6 +60,7 @@ impl Object {
             Object::Null => ObjectType::Null,
             Object::ReturnValue(_) => ObjectType::ReturnValue,
             Object::ErrorObj(_) => ObjectType::ErrorObj,
+            Object::Function(_) => ObjectType::Function,
         }
     }
 
@@ -46,6 +71,10 @@ impl Object {
             Object::Null => "null".to_string(),
             Object::ReturnValue(o) => o.to_string(),
             Object::ErrorObj(e) => e.to_string(),
+            Object::Function(func) => {
+                let params: Vec<String> = func.parameters.iter().map(|p| p.to_string()).collect();
+                format!("fn({}) {{\n{}\n}}", params.join(", "), func.body)
+            }
         }
     }
 }
@@ -55,7 +84,6 @@ impl std::fmt::Display for Object {
         write!(f, "{}", self.inspect())
     }
 }
-
 //
 // #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 // pub enum ObjectType {
