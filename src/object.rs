@@ -27,6 +27,7 @@ pub enum ObjectType {
     ReturnValue,
     ErrorObj,
     Function,
+    String,
 }
 
 impl std::fmt::Display for ObjectType {
@@ -38,6 +39,7 @@ impl std::fmt::Display for ObjectType {
             ObjectType::ReturnValue => write!(f, "RETURN_VALUE"),
             ObjectType::ErrorObj => write!(f, "ERROR"),
             ObjectType::Function => write!(f, "FUNCTION"),
+            ObjectType::String => write!(f, "STRING"),
         }
     }
 }
@@ -50,6 +52,7 @@ pub enum Object {
     ErrorObj(String),
     Null,
     Function(Function),
+    String(String),
 }
 
 impl Object {
@@ -61,6 +64,7 @@ impl Object {
             Object::ReturnValue(_) => ObjectType::ReturnValue,
             Object::ErrorObj(_) => ObjectType::ErrorObj,
             Object::Function(_) => ObjectType::Function,
+            Object::String(_) => ObjectType::String,
         }
     }
 
@@ -75,6 +79,7 @@ impl Object {
                 let params: Vec<String> = func.parameters.iter().map(|p| p.to_string()).collect();
                 format!("fn({}) {{\n{}\n}}", params.join(", "), func.body)
             }
+            Object::String(s) => s.to_string(),
         }
     }
 }

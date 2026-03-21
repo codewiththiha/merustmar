@@ -159,6 +159,7 @@ pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Opt
             }))
         }
         Expression::CallExpression(ce) => eval_call_expression(ce, env),
+        Expression::StringLiteral(sl) => Some(Object::String(sl.value.to_string())),
     }
 }
 
@@ -220,8 +221,10 @@ fn unwrap_return_value(obj: Object) -> Object {
 }
 
 fn extended_function_env(func: &Function, args: Vec<Object>) -> Rc<RefCell<Environment>> {
+    // moves outer to the outer by cloning (rc cloning very cheap) so the func can have both knowledge
     let env = Environment::new_enclosed(Rc::clone(&func.env));
     for (param, arg) in func.parameters.iter().zip(args) {
+        // this part define new inner
         env.borrow_mut().set(param.value.clone(), arg);
     }
     env
@@ -233,6 +236,7 @@ pub fn eval_program(program: &Program, env: &Rc<RefCell<Environment>>) -> Option
     for statement in &program.statements {
         result = eval_statement(statement, env);
 
+        // To return back immediately
         if let Some(Object::ReturnValue(val)) = result {
             return Some(*val);
         }
@@ -248,6 +252,7 @@ pub fn eval_statement(statement: &Statement, env: &Rc<RefCell<Environment>>) -> 
     match statement {
         Statement::Let(let_stmt) => {
             let val = let_stmt
+                // value store expressions
                 .value
                 .as_ref()
                 .and_then(|expr| eval_expression(expr, env))?;
@@ -256,6 +261,8 @@ pub fn eval_statement(statement: &Statement, env: &Rc<RefCell<Environment>>) -> 
                 return Some(val);
             }
 
+            // name.value name's from identifier and there's a value
+            // above value's from expressions that's evaluated to an object
             env.borrow_mut().set(let_stmt.name.value.clone(), val);
             None
         }
@@ -284,6 +291,7 @@ pub fn eval_block_statement(
 
     for stmt in block.statements.iter().flatten() {
         result = eval_statement(stmt, env);
+        // return back the wrapped (ReturnValue{Something}) back
         if matches!(&result, Some(Object::ReturnValue(_) | Object::ErrorObj(_))) {
             return result;
         }
@@ -295,4 +303,3 @@ pub fn eval_block_statement(
 fn is_error(obj: &Object) -> bool {
     matches!(obj, Object::ErrorObj(_))
 }
-

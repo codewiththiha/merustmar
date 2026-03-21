@@ -4,7 +4,7 @@ use crate::{
     ast::{
         BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement, FunctionLiteral,
         Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression,
-        Program, ReturnStatement, Statement,
+        Program, ReturnStatement, Statement, StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -75,6 +75,7 @@ impl<'a> Parser<'a> {
         parser.register_prefix(TokenType::LParen, Parser::parse_grouped_expression);
         parser.register_prefix(TokenType::If, Parser::parse_if_expression);
         parser.register_prefix(TokenType::Function, Parser::parse_function_literal);
+        parser.register_prefix(TokenType::String, Parser::parse_string_literal);
 
         // InfixFns
         parser.register_infix(TokenType::Plus, Parser::parse_infix_expression);
@@ -207,6 +208,22 @@ impl<'a> Parser<'a> {
             Some(v) => Some(Expression::IntegerLiteral(IntegerLiteral {
                 token: self.cur_token.clone(),
                 value: v,
+            })),
+            None => {
+                let msg = format!("could not parse {:?} as integer", self.cur_token.literal);
+                self.errors.push(msg);
+                None
+            }
+        }
+    }
+
+    // StringLiteral parser
+    pub fn parse_string_literal(&mut self) -> Option<Expression> {
+        let value = Some(&self.cur_token.literal);
+        match value {
+            Some(v) => Some(Expression::StringLiteral(StringLiteral {
+                token: self.cur_token.clone(),
+                value: v.clone(),
             })),
             None => {
                 let msg = format!("could not parse {:?} as integer", self.cur_token.literal);

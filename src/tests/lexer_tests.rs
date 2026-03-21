@@ -17,6 +17,8 @@ x + y။
 }
 10 == 10။
 10 != 9။
+  \"foobar\"
+\"Hello World\"
 ";
 
     let tests = vec![
@@ -93,6 +95,8 @@ x + y။
         (TokenType::NotEq, "!="),
         (TokenType::Int, "9"),
         (TokenType::Semicolon, "။"),
+        (TokenType::String, "foobar"),
+        (TokenType::String, "Hello World"),
         (TokenType::Eof, ""),
     ];
 

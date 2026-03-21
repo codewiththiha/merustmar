@@ -12,6 +12,7 @@ pub enum Expression {
     IfExpression(IfExpression),
     FunctionLiteral(FunctionLiteral),
     CallExpression(CallExpression),
+    StringLiteral(StringLiteral),
 }
 
 impl Expression {
@@ -25,6 +26,7 @@ impl Expression {
             Expression::IfExpression(ie) => ie.token_literal(),
             Expression::FunctionLiteral(fl) => fl.token_literal(),
             Expression::CallExpression(ce) => ce.token_literal(),
+            Expression::StringLiteral(sl) => sl.token_literal(),
         }
     }
 }
@@ -40,6 +42,7 @@ impl std::fmt::Display for Expression {
             Expression::IfExpression(ie) => write!(f, "{}", ie),
             Expression::FunctionLiteral(fl) => write!(f, "{}", fl),
             Expression::CallExpression(ce) => write!(f, "{}", ce),
+            Expression::StringLiteral(sl) => write!(f, "{}", sl),
         }
     }
 }
@@ -423,6 +426,26 @@ impl std::fmt::Display for FunctionLiteral {
             write!(f, "{}", b)?;
         }
         Ok(())
+    }
+}
+
+// StringLiteral
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StringLiteral {
+    pub token: Token,
+    pub value: String,
+}
+
+impl StringLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for StringLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.token.literal)
     }
 }
 

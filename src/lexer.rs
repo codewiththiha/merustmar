@@ -35,6 +35,17 @@ impl<'a> Lexer<'a> {
         self.input[start..self.position].to_string()
     }
 
+    pub fn read_string(&mut self) -> String {
+        let start_position = self.position.saturating_add(1);
+        loop {
+            self.read_char();
+            if self.ch.unwrap() == '"' || self.ch == None {
+                break;
+            }
+        }
+        self.input[start_position..self.position].to_string()
+    }
+
     pub fn read_char(&mut self) {
         if self.read_position >= self.input.len() {
             self.ch = None;
@@ -103,7 +114,7 @@ impl<'a> Lexer<'a> {
             Some('*') => Token::new(TokenType::Asterisk, "*".to_string()),
             Some('>') => Token::new(TokenType::Gt, ">".to_string()),
             Some('<') => Token::new(TokenType::Lt, "<".to_string()),
-
+            Some('"') => Token::new(TokenType::String, self.read_string()),
             // NOTICE how in this case we used explict return , cuz if we don't do that we might
             // end up scrolling to the end and execute self.read_char() which will increase the
             // read_position and cause conflicts and bugs (::D just experienced that for 1 hr)
