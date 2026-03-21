@@ -226,7 +226,10 @@ impl<'a> Parser<'a> {
                 value: v.clone(),
             })),
             None => {
-                let msg = format!("could not parse {:?} as integer", self.cur_token.literal);
+                let msg = format!(
+                    "could not parse {:?} as StringLiteral",
+                    self.cur_token.literal
+                );
                 self.errors.push(msg);
                 None
             }
