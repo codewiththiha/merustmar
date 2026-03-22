@@ -159,7 +159,7 @@ pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Opt
             }))
         }
         Expression::CallExpression(ce) => eval_call_expression(ce, env),
-        Expression::StringLiteral(sl) => Some(Object::String(sl.value.to_string())),
+        Expression::StringLiteral(sl) => Some(Object::String(sl.value.clone())),
     }
 }
 

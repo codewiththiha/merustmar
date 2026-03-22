@@ -219,21 +219,10 @@ impl<'a> Parser<'a> {
 
     // StringLiteral parser
     pub fn parse_string_literal(&mut self) -> Option<Expression> {
-        let value = Some(&self.cur_token.literal);
-        match value {
-            Some(v) => Some(Expression::StringLiteral(StringLiteral {
-                token: self.cur_token.clone(),
-                value: v.clone(),
-            })),
-            None => {
-                let msg = format!(
-                    "could not parse {:?} as StringLiteral",
-                    self.cur_token.literal
-                );
-                self.errors.push(msg);
-                None
-            }
-        }
+        Some(Expression::StringLiteral(StringLiteral {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        }))
     }
 
     // LetStatement parser

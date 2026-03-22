@@ -39,8 +39,10 @@ impl<'a> Lexer<'a> {
         let start_position = self.position.saturating_add(1);
         loop {
             self.read_char();
-            if self.ch.unwrap() == '"' || self.ch == None {
-                break;
+            // Safer and neater
+            match self.ch {
+                Some('"') | None => break,
+                _ => {}
             }
         }
         self.input[start_position..self.position].to_string()
