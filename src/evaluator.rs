@@ -7,7 +7,7 @@ use crate::{
         Statement,
     },
     environment::Environment,
-    object::{Function, Object},
+    object::{Function, Object, ObjectType},
 };
 
 fn eval_identifier(node: &crate::ast::Identifier, env: &Rc<RefCell<Environment>>) -> Object {
@@ -83,7 +83,10 @@ fn eval_infix_expression(
 
     match (&left, &right) {
         (Object::Integer(l), Object::Integer(r)) => {
-            Some(eval_infix_integer_expression(*l, *r, &infix.operator))
+            Some(eval_infix_integer_expression(l, r, &infix.operator))
+        }
+        (Object::String(l), Object::String(r)) => {
+            Some(eval_infix_string_expression(l, r, &infix.operator))
         }
         (Object::Boolean(_), Object::Boolean(_)) => match infix.operator.as_str() {
             "==" => Some(Object::Boolean(left == right)),
@@ -101,6 +104,13 @@ fn eval_infix_expression(
             infix.operator,
             right.object_type()
         ))),
+    }
+}
+
+pub fn eval_infix_string_expression(left: &String, right: &String, operator: &str) -> Object {
+    match operator {
+        "+" => Object::String(format!("{}{}", left, right)),
+        _ => Object::ErrorObj(format!("unknown operator: STRING {} STRING", operator)),
     }
 }
 
@@ -126,7 +136,7 @@ pub fn eval_if_expression(if_exp: &IfExpression, env: &Rc<RefCell<Environment>>)
     }
 }
 
-pub fn eval_infix_integer_expression(left: i64, right: i64, operator: &str) -> Object {
+pub fn eval_infix_integer_expression(left: &i64, right: &i64, operator: &str) -> Object {
     match operator {
         "+" => Object::Integer(left + right),
         "-" => Object::Integer(left - right),

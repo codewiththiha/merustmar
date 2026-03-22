@@ -573,3 +573,18 @@ fn test_function_application() {
         }
     }
 }
+
+// String Concatenation test
+
+#[test]
+fn test_string_concatenation() {
+    let input = "\"Hello\" + \" \" + \"World\"";
+    let evaluated = test_eval(input);
+
+    match evaluated {
+        Some(Object::String(value)) => {
+            assert_eq!(value, "Hello World");
+        }
+        other => panic!("object is not String. got={:?}", other),
+    }
+}
