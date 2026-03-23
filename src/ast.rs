@@ -13,6 +13,8 @@ pub enum Expression {
     FunctionLiteral(FunctionLiteral),
     CallExpression(CallExpression),
     StringLiteral(StringLiteral),
+    ArrayLiteral(ArrayLiteral),
+    IndexExpression(IndexExpression),
 }
 
 impl Expression {
@@ -27,6 +29,8 @@ impl Expression {
             Expression::FunctionLiteral(fl) => fl.token_literal(),
             Expression::CallExpression(ce) => ce.token_literal(),
             Expression::StringLiteral(sl) => sl.token_literal(),
+            Expression::ArrayLiteral(al) => al.token_literal(),
+            Expression::IndexExpression(ie) => ie.token_literal(),
         }
     }
 }
@@ -43,6 +47,8 @@ impl std::fmt::Display for Expression {
             Expression::FunctionLiteral(fl) => write!(f, "{}", fl),
             Expression::CallExpression(ce) => write!(f, "{}", ce),
             Expression::StringLiteral(sl) => write!(f, "{}", sl),
+            Expression::ArrayLiteral(al) => write!(f, "{}", al),
+            Expression::IndexExpression(ie) => write!(f, "{}", ie),
         }
     }
 }
@@ -483,4 +489,62 @@ impl std::fmt::Display for CallExpression {
     }
 }
 
-// type FunctionLiteral
+// ArrayLiteral
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ArrayLiteral {
+    pub token: Token,
+    pub elements: Option<Vec<Expression>>,
+}
+
+impl ArrayLiteral {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for ArrayLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        if let Some(elements) = &self.elements {
+            let mut iter = elements.iter();
+            // TODO note this down
+            if let Some(first) = iter.next() {
+                write!(f, "{}", first)?;
+                for al in iter {
+                    write!(f, ", {}", al)?;
+                }
+            }
+        }
+        write!(f, "]")
+    }
+}
+
+// IndexExpression
+#[derive(Debug, Clone, PartialEq)]
+pub struct IndexExpression {
+    pub token: Token,
+    pub left: Option<Box<Expression>>,
+    pub index: Option<Box<Expression>>,
+}
+
+impl IndexExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for IndexExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // (something[]) we are creating this template
+        write!(f, "(")?;
+        if let Some(left) = &self.left {
+            write!(f, "{}", left)?;
+        }
+        write!(f, "[")?;
+        if let Some(index) = &self.index {
+            write!(f, "{}", index)?;
+        }
+        write!(f, "])")
+    }
+}

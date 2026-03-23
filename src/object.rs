@@ -8,7 +8,7 @@ use crate::{
 // Built-in function type
 pub type BuiltinFunction = fn(Vec<Object>) -> Object;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub parameters: Vec<Identifier>,
     pub body: BlockStatement,
@@ -25,6 +25,7 @@ pub enum ObjectType {
     Function,
     String,
     Builtin,
+    Array,
 }
 
 impl std::fmt::Display for ObjectType {
@@ -38,6 +39,7 @@ impl std::fmt::Display for ObjectType {
             ObjectType::Function => write!(f, "FUNCTION"),
             ObjectType::String => write!(f, "STRING"),
             ObjectType::Builtin => write!(f, "BUILTIN"),
+            ObjectType::Array => write!(f, "ARRAY"),
         }
     }
 }
@@ -52,6 +54,7 @@ pub enum Object {
     Function(Function),
     String(String),
     Builtin(BuiltinFunction),
+    Array(Vec<Object>),
 }
 
 // this entire thing's just necessary cuz mf BuiltinFunction causing some chaos
@@ -67,6 +70,7 @@ impl PartialEq for Object {
             (Object::String(a), Object::String(b)) => a == b,
             // Two builtins are "equal" only if they point to the same function
             (Object::Builtin(a), Object::Builtin(b)) => std::ptr::fn_addr_eq(*a, *b),
+            (Object::Array(a), Object::Array(b)) => a == b,
             _ => false,
         }
     }
@@ -83,6 +87,7 @@ impl Object {
             Object::Function(_) => ObjectType::Function,
             Object::String(_) => ObjectType::String,
             Object::Builtin(_) => ObjectType::Builtin,
+            Object::Array(_) => ObjectType::Array,
         }
     }
 
@@ -99,6 +104,10 @@ impl Object {
             }
             Object::String(s) => s.to_string(),
             Object::Builtin(_) => "builtin function".to_string(),
+            Object::Array(elements) => {
+                let els: Vec<String> = elements.iter().map(|e| e.inspect()).collect();
+                format!("[{}]", els.join(", "))
+            }
         }
     }
 }

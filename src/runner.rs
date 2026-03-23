@@ -1,10 +1,8 @@
-use std::fs;
-use std::io::{self, Write};
-
 use crate::environment::Environment;
 use crate::evaluator;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
+use std::fs;
 
 pub fn run_file(path: &str) {
     if !path.ends_with(".mrm") {
@@ -21,8 +19,8 @@ pub fn run_file(path: &str) {
 
     let errors = parser.return_errors();
     if !errors.is_empty() {
-        let mut stdout = io::stdout();
-        print_parser_errors(&mut stdout, errors);
+        // let mut stdout = io::stdout();
+        print_parser_errors(errors);
         return;
     }
 
@@ -33,10 +31,9 @@ pub fn run_file(path: &str) {
     }
 }
 
-fn print_parser_errors(out: &mut impl Write, errors: &[String]) {
+fn print_parser_errors(errors: &[String]) {
     eprintln!("Woops! We ran into some stupid errors:");
     for msg in errors {
         eprintln!("\t{}", msg);
     }
 }
-

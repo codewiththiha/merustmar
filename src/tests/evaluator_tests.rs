@@ -4,7 +4,7 @@ use crate::{environment::Environment, evaluator, lexer::Lexer, object::Object, p
 // Helper: test_eval
 // ============================================================================
 
-fn test_eval(input: &str) -> Option<Object> {
+pub fn test_eval(input: &str) -> Option<Object> {
     let mut lexer = Lexer::new(input);
     let mut parser = Parser::new(&mut lexer);
     let env = Environment::new(); // returns Rc<RefCell<Environment>>
@@ -23,7 +23,7 @@ fn test_eval(input: &str) -> Option<Object> {
 // Helper: test_integer_object
 // ============================================================================
 
-fn test_integer_object(obj: &Option<Object>, expected: i64) -> bool {
+pub fn test_integer_object(obj: &Option<Object>, expected: i64) -> bool {
     match obj {
         Some(Object::Integer(value)) => {
             if *value != expected {
@@ -47,7 +47,7 @@ fn test_integer_object(obj: &Option<Object>, expected: i64) -> bool {
 // Helper: test_boolean_object
 // ============================================================================
 
-fn test_boolean_object(obj: &Option<Object>, expected: bool) -> bool {
+pub fn test_boolean_object(obj: &Option<Object>, expected: bool) -> bool {
     match obj {
         Some(Object::Boolean(value)) => {
             if *value != expected {
@@ -418,7 +418,7 @@ fn test_return_statements() {
     }
 }
 
-fn test_error_object(obj: &Option<Object>, expected_message: &str) -> bool {
+pub fn test_error_object(obj: &Option<Object>, expected_message: &str) -> bool {
     match obj {
         Some(Object::ErrorObj(message)) => {
             if message != expected_message {
@@ -639,6 +639,126 @@ fn test_builtin_functions() {
             }
             Expected::Err(expected_msg) => {
                 if !test_error_object(&evaluated, expected_msg) {
+                    panic!("test[{}] failed for input '{}'", i, tt.input);
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Helper: test_null_object
+// ============================================================================
+
+pub fn test_null_object(obj: &Option<Object>) -> bool {
+    match obj {
+        Some(Object::Null) => true,
+        Some(other) => {
+            eprintln!("object is not Null. got={:?}", other);
+            false
+        }
+        None => {
+            eprintln!("object is None, expected Null");
+            false
+        }
+    }
+}
+
+// ============================================================================
+// Test: Array Literals
+// ============================================================================
+
+#[test]
+fn test_array_literals() {
+    let input = "[1, 2 * 2, 3 + 3]";
+    let evaluated = test_eval(input);
+
+    match evaluated {
+        Some(Object::Array(elements)) => {
+            assert_eq!(
+                elements.len(),
+                3,
+                "array has wrong num of elements. got={}",
+                elements.len()
+            );
+            assert!(test_integer_object(&Some(elements[0].clone()), 1));
+            assert!(test_integer_object(&Some(elements[1].clone()), 4));
+            assert!(test_integer_object(&Some(elements[2].clone()), 6));
+        }
+        other => panic!("object is not Array. got={:?}", other),
+    }
+}
+
+// ============================================================================
+// Test: Array Index Expressions
+// ============================================================================
+
+#[test]
+fn test_array_index_expressions() {
+    enum Expected {
+        Int(i64),
+        Null,
+    }
+
+    struct Test {
+        input: &'static str,
+        expected: Expected,
+    }
+
+    let tests = vec![
+        Test {
+            input: "[1, 2, 3][0]",
+            expected: Expected::Int(1),
+        },
+        Test {
+            input: "[1, 2, 3][1]",
+            expected: Expected::Int(2),
+        },
+        Test {
+            input: "[1, 2, 3][2]",
+            expected: Expected::Int(3),
+        },
+        Test {
+            input: "ထား i = 0။ [1][i]။",
+            expected: Expected::Int(1),
+        },
+        Test {
+            input: "[1, 2, 3][1 + 1]။",
+            expected: Expected::Int(3),
+        },
+        Test {
+            input: "ထား myArray = [1, 2, 3]။ myArray[2]။",
+            expected: Expected::Int(3),
+        },
+        Test {
+            input: "ထား myArray = [1, 2, 3]။ myArray[0] + myArray[1] + myArray[2]။",
+            expected: Expected::Int(6),
+        },
+        Test {
+            input: "ထား myArray = [1, 2, 3]။ ထား i = myArray[0]။ myArray[i]။",
+            expected: Expected::Int(2),
+        },
+        Test {
+            input: "[1, 2, 3][3]",
+            expected: Expected::Null,
+        },
+        Test {
+            input: "[1, 2, 3][-1]",
+            expected: Expected::Null,
+        },
+    ];
+
+    for (i, tt) in tests.iter().enumerate() {
+        let evaluated = test_eval(tt.input);
+
+        match &tt.expected {
+            Expected::Int(expected_val) => {
+                if !test_integer_object(&evaluated, *expected_val) {
+                    panic!("test[{}] failed for input '{}'", i, tt.input);
+                }
+            }
+            Expected::Null => {
+                if !test_null_object(&evaluated) {
                     panic!("test[{}] failed for input '{}'", i, tt.input);
                 }
             }

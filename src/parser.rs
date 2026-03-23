@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement, FunctionLiteral,
-        Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression,
-        Program, ReturnStatement, Statement, StringLiteral,
+        ArrayLiteral, BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement,
+        FunctionLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
+        IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement,
+        StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -20,6 +21,7 @@ pub enum Precedence {
     Product = 4,     // *
     Prefix = 5,      // -X or !X
     Call = 6,        // myFunction(X)
+    Index = 7,
 }
 
 impl Precedence {
@@ -34,6 +36,7 @@ impl Precedence {
             TokenType::Slash => Precedence::Product,
             TokenType::Asterisk => Precedence::Product,
             TokenType::LParen => Precedence::Call,
+            TokenType::LBRACKET => Precedence::Index,
             _ => Precedence::Lowest,
         }
     }
@@ -76,6 +79,7 @@ impl<'a> Parser<'a> {
         parser.register_prefix(TokenType::If, Parser::parse_if_expression);
         parser.register_prefix(TokenType::Function, Parser::parse_function_literal);
         parser.register_prefix(TokenType::String, Parser::parse_string_literal);
+        parser.register_prefix(TokenType::LBRACKET, Parser::parse_array_literal);
 
         // InfixFns
         parser.register_infix(TokenType::Plus, Parser::parse_infix_expression);
@@ -87,6 +91,7 @@ impl<'a> Parser<'a> {
         parser.register_infix(TokenType::Lt, Parser::parse_infix_expression);
         parser.register_infix(TokenType::Gt, Parser::parse_infix_expression);
         parser.register_infix(TokenType::LParen, Parser::parse_call_expression);
+        parser.register_infix(TokenType::LBRACKET, Parser::parse_index_expression);
 
         parser.next_token();
         parser.next_token();
@@ -442,14 +447,15 @@ impl<'a> Parser<'a> {
         Some(Expression::CallExpression(CallExpression {
             token: self.cur_token.clone(),
             function: Some(Box::new(function)),
-            arguments: self.parse_call_arguments(),
+            arguments: self.parse_expression_list(TokenType::RParen),
         }))
     }
 
-    pub fn parse_call_arguments(&mut self) -> Option<Vec<Expression>> {
+    // function call args (ends with RParen) and array elements (ends with RBracket)
+    pub fn parse_expression_list(&mut self, end: TokenType) -> Option<Vec<Expression>> {
         let mut args = Vec::new();
         // for the function call without arguments like doSomething();
-        if self.peek_token_is(TokenType::RParen) {
+        if self.peek_token_is(end) {
             self.next_token();
             return Some(args);
         }
@@ -467,11 +473,38 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if !self.expect_peek(TokenType::RParen) {
+        if !self.expect_peek(end) {
             return None;
         }
 
-        return Some(args);
+        Some(args)
+    }
+
+    //Parse ArrayLiteral
+    // Parse array literal: [1, 2, 3]
+    pub fn parse_array_literal(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let elements = self.parse_expression_list(TokenType::RBRACKET);
+        Some(Expression::ArrayLiteral(ArrayLiteral { token, elements }))
+    }
+
+    // Parse index expression: myArray[0]
+    // This is an infix parser — [ is treated as the "operator"
+    // left operand = myArray, right operand = 0
+    pub fn parse_index_expression(&mut self, left: Expression) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        self.next_token();
+        let index = self.parse_expression(Precedence::Lowest);
+
+        if !self.expect_peek(TokenType::RBRACKET) {
+            return None;
+        }
+
+        Some(Expression::IndexExpression(IndexExpression {
+            token,
+            left: Some(Box::new(left)),
+            index: index.map(Box::new),
+        }))
     }
 
     // Helpers

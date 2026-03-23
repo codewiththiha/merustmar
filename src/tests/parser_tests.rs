@@ -597,6 +597,14 @@ fn test_operator_precedence_parsing() {
             input: "add(a + b + c * d / f + g)",
             expected: "add((((a + b) + ((c * d) / f)) + g))",
         },
+        PrecedenceTest {
+            input: "a * [1, 2, 3, 4][b * c] * d",
+            expected: "((a * ([1, 2, 3, 4][(b * c)])) * d)",
+        },
+        PrecedenceTest {
+            input: "add(a * b[2], b[1], 2 * [1, 2][1])",
+            expected: "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))",
+        },
     ];
 
     for (i, tt) in tests.iter().enumerate() {
@@ -1142,5 +1150,113 @@ fn test_let_statements_with_values() {
                 panic!("test[{}] - let statement value is None", i);
             }
         }
+    }
+}
+
+// ============================================================================
+// Array Literal Parsing Test
+// ============================================================================
+
+#[test]
+fn test_parsing_array_literals() {
+    let input = "[1, 2 * 2, 3 + 3]";
+
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    let stmt = match &program.statements[0] {
+        Statement::Expression(expr_stmt) => expr_stmt,
+        _ => panic!(
+            "program.Statements[0] is not ExpressionStatement. got={:?}",
+            program.statements[0]
+        ),
+    };
+
+    let array = match &stmt.expression {
+        Some(Expression::ArrayLiteral(al)) => al,
+        _ => panic!("exp not ArrayLiteral. got={:?}", stmt.expression),
+    };
+
+    let elements = array.elements.as_ref().expect("elements should be Some");
+
+    assert_eq!(
+        elements.len(),
+        3,
+        "len(array.Elements) not 3. got={}",
+        elements.len()
+    );
+
+    assert!(
+        test_literal_expression(&elements[0], &LiteralExpected::Int(1)),
+        "elements[0] failed"
+    );
+    assert!(
+        test_infix_expression(
+            &elements[1],
+            &LiteralExpected::Int(2),
+            "*",
+            &LiteralExpected::Int(2)
+        ),
+        "elements[1] failed"
+    );
+    assert!(
+        test_infix_expression(
+            &elements[2],
+            &LiteralExpected::Int(3),
+            "+",
+            &LiteralExpected::Int(3)
+        ),
+        "elements[2] failed"
+    );
+}
+
+// ============================================================================
+// Index Expression Parsing Test
+// ============================================================================
+
+#[test]
+fn test_parsing_index_expressions() {
+    let input = "myArray[1 + 1]";
+
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    let program = parser.parse_program();
+
+    check_parser_errors(&parser);
+
+    let stmt = match &program.statements[0] {
+        Statement::Expression(expr_stmt) => expr_stmt,
+        _ => panic!("Not ExpressionStatement"),
+    };
+
+    let index_exp = match &stmt.expression {
+        Some(Expression::IndexExpression(ie)) => ie,
+        _ => panic!("exp not IndexExpression. got={:?}", stmt.expression),
+    };
+
+    if let Some(ref left) = index_exp.left {
+        assert!(
+            test_identifier(left.as_ref(), "myArray"),
+            "left is not identifier 'myArray'"
+        );
+    } else {
+        panic!("left is None");
+    }
+
+    if let Some(ref index) = index_exp.index {
+        assert!(
+            test_infix_expression(
+                index.as_ref(),
+                &LiteralExpected::Int(1),
+                "+",
+                &LiteralExpected::Int(1),
+            ),
+            "index is not infix 1 + 1"
+        );
+    } else {
+        panic!("index is None");
     }
 }

@@ -177,7 +177,56 @@ pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Opt
         }
         Expression::CallExpression(ce) => eval_call_expression(ce, env),
         Expression::StringLiteral(sl) => Some(Object::String(sl.value.clone())),
+        Expression::ArrayLiteral(al) => {
+            let elements = eval_expressions(al.elements.as_deref().unwrap_or(&[]), env);
+            if elements.len() == 1 && is_error(&elements[0]) {
+                return elements.into_iter().next();
+            }
+            Some(Object::Array(elements))
+        }
+
+        Expression::IndexExpression(ie) => {
+            let left = ie
+                .left
+                .as_ref()
+                .and_then(|expr| eval_expression(expr, env))?;
+            if is_error(&left) {
+                return Some(left);
+            }
+            let index = ie
+                .index
+                .as_ref()
+                .and_then(|expr| eval_expression(expr, env))?;
+            if is_error(&index) {
+                return Some(index);
+            }
+            Some(eval_index_expression(left, index))
+        }
     }
+}
+
+fn eval_index_expression(left: Object, index: Object) -> Object {
+    match (&left, &index) {
+        (Object::Array(_), Object::Integer(_)) => eval_array_index_expression(left, index),
+        _ => Object::ErrorObj(format!(
+            "index operator not supported: {}",
+            left.object_type()
+        )),
+    }
+}
+
+fn eval_array_index_expression(array: Object, index: Object) -> Object {
+    let Object::Array(elements) = array else {
+        return Object::Null;
+    };
+    let Object::Integer(idx) = index else {
+        return Object::Null;
+    };
+    let max = (elements.len() as i64) - 1;
+    if idx < 0 || idx > max {
+        return Object::Null;
+    }
+    elements[idx as usize].clone()
 }
 
 pub fn eval_call_expression(

@@ -103,6 +103,8 @@ impl<'a> Lexer<'a> {
             Some('+') => Token::new(TokenType::Plus, "+".to_string()),
             Some('{') => Token::new(TokenType::LBrace, "{".to_string()),
             Some('}') => Token::new(TokenType::RBrace, "}".to_string()),
+            Some('[') => Token::new(TokenType::LBRACKET, "[".to_string()),
+            Some(']') => Token::new(TokenType::RBRACKET, "]".to_string()),
             Some('!') => {
                 if self.peek_char() == Some('=') {
                     self.read_char();

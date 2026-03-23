@@ -19,6 +19,7 @@ x + y။
 10 != 9။
   \"foobar\"
 \"Hello World\"
+  [1, 2]။
 ";
 
     let tests = vec![
@@ -97,6 +98,12 @@ x + y။
         (TokenType::Semicolon, "။"),
         (TokenType::String, "foobar"),
         (TokenType::String, "Hello World"),
+        (TokenType::LBRACKET, "["),
+        (TokenType::Int, "1"),
+        (TokenType::Comma, ","),
+        (TokenType::Int, "2"),
+        (TokenType::RBRACKET, "]"),
+        (TokenType::Semicolon, "။"),
         (TokenType::Eof, ""),
     ];
 
