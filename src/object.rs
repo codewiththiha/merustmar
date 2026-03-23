@@ -5,18 +5,14 @@ use crate::{
     environment::Environment,
 };
 
+// Built-in function type
+pub type BuiltinFunction = fn(Vec<Object>) -> Object;
+
 #[derive(Debug, Clone)]
 pub struct Function {
     pub parameters: Vec<Identifier>,
     pub body: BlockStatement,
     pub env: Rc<RefCell<Environment>>,
-}
-
-// Manual PartialEq — skip env to avoid Rc cycle stack overflow
-impl PartialEq for Function {
-    fn eq(&self, other: &Self) -> bool {
-        self.parameters == other.parameters && self.body == other.body
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +24,7 @@ pub enum ObjectType {
     ErrorObj,
     Function,
     String,
+    Builtin,
 }
 
 impl std::fmt::Display for ObjectType {
@@ -40,11 +37,12 @@ impl std::fmt::Display for ObjectType {
             ObjectType::ErrorObj => write!(f, "ERROR"),
             ObjectType::Function => write!(f, "FUNCTION"),
             ObjectType::String => write!(f, "STRING"),
+            ObjectType::Builtin => write!(f, "BUILTIN"),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Object {
     Integer(i64),
     Boolean(bool),
@@ -53,6 +51,25 @@ pub enum Object {
     Null,
     Function(Function),
     String(String),
+    Builtin(BuiltinFunction),
+}
+
+// this entire thing's just necessary cuz mf BuiltinFunction causing some chaos
+impl PartialEq for Object {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Object::Integer(a), Object::Integer(b)) => a == b,
+            (Object::Boolean(a), Object::Boolean(b)) => a == b,
+            (Object::ReturnValue(a), Object::ReturnValue(b)) => a == b,
+            (Object::ErrorObj(a), Object::ErrorObj(b)) => a == b,
+            (Object::Null, Object::Null) => true,
+            (Object::Function(a), Object::Function(b)) => a == b,
+            (Object::String(a), Object::String(b)) => a == b,
+            // Two builtins are "equal" only if they point to the same function
+            (Object::Builtin(a), Object::Builtin(b)) => std::ptr::fn_addr_eq(*a, *b),
+            _ => false,
+        }
+    }
 }
 
 impl Object {
@@ -65,6 +82,7 @@ impl Object {
             Object::ErrorObj(_) => ObjectType::ErrorObj,
             Object::Function(_) => ObjectType::Function,
             Object::String(_) => ObjectType::String,
+            Object::Builtin(_) => ObjectType::Builtin,
         }
     }
 
@@ -80,6 +98,7 @@ impl Object {
                 format!("fn({}) {{\n{}\n}}", params.join(", "), func.body)
             }
             Object::String(s) => s.to_string(),
+            Object::Builtin(_) => "builtin function".to_string(),
         }
     }
 }
@@ -89,6 +108,108 @@ impl std::fmt::Display for Object {
         write!(f, "{}", self.inspect())
     }
 }
+
+//// Version 2
+// use std::{cell::RefCell, rc::Rc};
+//
+// use crate::{
+//     ast::{BlockStatement, Identifier},
+//     environment::Environment,
+// };
+//
+// #[derive(Debug, Clone)]
+// pub struct Function {
+//     pub parameters: Vec<Identifier>,
+//     pub body: BlockStatement,
+//     pub env: Rc<RefCell<Environment>>,
+// }
+//
+// // Manual PartialEq — skip env to avoid Rc cycle stack overflow
+// impl PartialEq for Function {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.parameters == other.parameters && self.body == other.body
+//     }
+// }
+//
+// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// pub enum ObjectType {
+//     Integer,
+//     Boolean,
+//     Null,
+//     ReturnValue,
+//     ErrorObj,
+//     Function,
+//     String,
+//     BuiltIn,
+// }
+//
+// pub type BuiltInFunction = fn(Vec<Object>) -> Object;
+//
+// impl std::fmt::Display for ObjectType {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             ObjectType::Integer => write!(f, "INTEGER"),
+//             ObjectType::Boolean => write!(f, "BOOLEAN"),
+//             ObjectType::Null => write!(f, "NULL"),
+//             ObjectType::ReturnValue => write!(f, "RETURN_VALUE"),
+//             ObjectType::ErrorObj => write!(f, "ERROR"),
+//             ObjectType::Function => write!(f, "FUNCTION"),
+//             ObjectType::String => write!(f, "STRING"),
+//             ObjectType::BuiltIn => write!(f, "BUILTIN"),
+//         }
+//     }
+// }
+//
+// #[derive(Debug, Clone, PartialEq)]
+// pub enum Object {
+//     Integer(i64),
+//     Boolean(bool),
+//     ReturnValue(Box<Object>),
+//     ErrorObj(String),
+//     Null,
+//     Function(Function),
+//     String(String),
+//     BuiltIn(BuiltInFunction),
+// }
+//
+// impl Object {
+//     pub fn object_type(&self) -> ObjectType {
+//         match self {
+//             Object::Integer(_) => ObjectType::Integer,
+//             Object::Boolean(_) => ObjectType::Boolean,
+//             Object::Null => ObjectType::Null,
+//             Object::ReturnValue(_) => ObjectType::ReturnValue,
+//             Object::ErrorObj(_) => ObjectType::ErrorObj,
+//             Object::Function(_) => ObjectType::Function,
+//             Object::String(_) => ObjectType::String,
+//             Object::BuiltIn(_) => ObjectType::BuiltIn,
+//         }
+//     }
+//
+//     pub fn inspect(&self) -> String {
+//         match self {
+//             Object::Integer(i) => i.to_string(),
+//             Object::Boolean(b) => b.to_string(),
+//             Object::Null => "null".to_string(),
+//             Object::ReturnValue(o) => o.to_string(),
+//             Object::ErrorObj(e) => e.to_string(),
+//             Object::Function(func) => {
+//                 let params: Vec<String> = func.parameters.iter().map(|p| p.to_string()).collect();
+//                 format!("fn({}) {{\n{}\n}}", params.join(", "), func.body)
+//             }
+//             Object::String(s) => s.to_string(),
+//             Object::BuiltIn(_) => "builtin function".to_string(),
+//         }
+//     }
+// }
+//
+// impl std::fmt::Display for Object {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{}", self.inspect())
+//     }
+// }
+
+////Version 1
 //
 // #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 // pub enum ObjectType {

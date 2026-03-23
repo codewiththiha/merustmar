@@ -6,14 +6,21 @@ use crate::{
         BlockStatement, Expression, IfExpression, InfixExpression, PrefixExpression, Program,
         Statement,
     },
+    builtins,
     environment::Environment,
-    object::{Function, Object, ObjectType},
+    object::{Function, Object},
 };
 
 fn eval_identifier(node: &crate::ast::Identifier, env: &Rc<RefCell<Environment>>) -> Object {
-    env.borrow()
-        .get(&node.value)
-        .unwrap_or_else(|| Object::ErrorObj(format!("identifier not found: {}", node.value)))
+    if let Some(val) = env.borrow().get(&node.value) {
+        return val;
+    }
+
+    if let Some(builtin) = builtins::get_builtin(&node.value) {
+        return builtin;
+    }
+
+    Object::ErrorObj(format!("identifier not found: {}", node.value))
 }
 
 pub fn is_truthy(obj: &Object) -> bool {
@@ -216,6 +223,7 @@ fn apply_function(function: Object, args: Vec<Object>) -> Option<Object> {
             let evaluated = eval_block_statement(&func.body, &extended_env)?;
             Some(unwrap_return_value(evaluated))
         }
+        Object::Builtin(func) => Some(func(args)),
         _ => Some(Object::ErrorObj(format!(
             "not a function: {}",
             function.object_type()

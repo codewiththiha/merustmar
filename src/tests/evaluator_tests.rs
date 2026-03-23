@@ -588,3 +588,60 @@ fn test_string_concatenation() {
         other => panic!("object is not String. got={:?}", other),
     }
 }
+
+// ============================================================================
+// Test: Built-in Functions
+// ============================================================================
+
+#[test]
+fn test_builtin_functions() {
+    enum Expected {
+        Int(i64),
+        Err(String),
+    }
+
+    struct Test {
+        input: &'static str,
+        expected: Expected,
+    }
+
+    let tests = vec![
+        Test {
+            input: r#"len("")"#,
+            expected: Expected::Int(0),
+        },
+        Test {
+            input: r#"len("four")"#,
+            expected: Expected::Int(4),
+        },
+        Test {
+            input: r#"len("hello world")"#,
+            expected: Expected::Int(11),
+        },
+        Test {
+            input: r#"len(1)"#,
+            expected: Expected::Err("argument to `len` not supported, got INTEGER".to_string()),
+        },
+        Test {
+            input: r#"len("one", "two")"#,
+            expected: Expected::Err("wrong number of arguments. got=2, want=1".to_string()),
+        },
+    ];
+
+    for (i, tt) in tests.iter().enumerate() {
+        let evaluated = test_eval(tt.input);
+
+        match &tt.expected {
+            Expected::Int(expected_val) => {
+                if !test_integer_object(&evaluated, *expected_val) {
+                    panic!("test[{}] failed for input '{}'", i, tt.input);
+                }
+            }
+            Expected::Err(expected_msg) => {
+                if !test_error_object(&evaluated, expected_msg) {
+                    panic!("test[{}] failed for input '{}'", i, tt.input);
+                }
+            }
+        }
+    }
+}
