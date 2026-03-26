@@ -206,6 +206,8 @@ pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Opt
 }
 
 fn eval_index_expression(left: Object, index: Object) -> Object {
+    // So parser will parse even index's expression results in string or other objects that's not
+    // Integer , this is the part that catch that error.
     match (&left, &index) {
         (Object::Array(_), Object::Integer(_)) => eval_array_index_expression(left, index),
         _ => Object::ErrorObj(format!(
@@ -224,6 +226,7 @@ fn eval_array_index_expression(array: Object, index: Object) -> Object {
     };
     let max = (elements.len() as i64) - 1;
     if idx < 0 || idx > max {
+        // showing error message like index out of range might better
         return Object::Null;
     }
     elements[idx as usize].clone()
