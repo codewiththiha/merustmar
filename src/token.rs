@@ -45,6 +45,7 @@ pub enum TokenType {
     RBRACKET,
 
     Colon,
+    LetSuffix,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -70,6 +71,7 @@ impl Token {
             "ဒါယူ" => TokenType::Return,
             "မှန်" => TokenType::True,
             "မှား" => TokenType::False,
+            "လို့ထား" => TokenType::LetSuffix,
             _ => TokenType::Ident,
         }
     }

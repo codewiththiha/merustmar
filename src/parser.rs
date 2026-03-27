@@ -4,8 +4,8 @@ use crate::{
     ast::{
         ArrayLiteral, BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement,
         FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
-        IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement,
-        StringLiteral,
+        IntegerLiteral, LetStatement, MultiLetStatement, PrefixExpression, Program,
+        ReturnStatement, Statement, StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -117,8 +117,60 @@ impl<'a> Parser<'a> {
         match self.cur_token.token_type {
             TokenType::Let => self.parse_let_statement(),
             TokenType::Return => self.parse_return_statement(),
+            // If it's an Identifier AND the next token is '=', it is NOT a standard expression.
+            TokenType::Ident if self.peek_token_is(TokenType::Assign) => {
+                self.parse_multi_let_statement()
+            }
             _ => self.parse_expression_statement(),
         }
+    }
+
+    pub fn parse_multi_let_statement(&mut self) -> Option<Statement> {
+        let mut declarations = Vec::new();
+        let start_token = self.cur_token.clone(); // Capture the first identifier
+
+        loop {
+            // Capture the identifier
+            let name = Identifier {
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            };
+
+            // Expect the '='
+            if !self.expect_peek(TokenType::Assign) {
+                return None;
+            }
+            self.next_token(); // Move past '='
+
+            // Parse the expression value
+            let value = self.parse_expression(Precedence::Lowest)?;
+            declarations.push((name, value));
+
+            // Check if there are more commas
+            if self.peek_token_is(TokenType::Comma) {
+                self.next_token(); // Move to ','
+                if !self.expect_peek(TokenType::Ident) {
+                    return None;
+                }
+            } else {
+                break; // No comma, we are done collecting pairs
+            }
+        }
+
+        // Expect the closing 'လို့ထား'
+        if !self.expect_peek(TokenType::LetSuffix) {
+            return None;
+        }
+
+        // Handle optional semicolon
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        Some(Statement::MultiLet(MultiLetStatement {
+            token: start_token,
+            declarations,
+        }))
     }
 
     pub fn parse_expression_statement(&mut self) -> Option<Statement> {

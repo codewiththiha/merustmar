@@ -389,6 +389,16 @@ pub fn eval_statement(statement: &Statement, env: &Rc<RefCell<Environment>>) -> 
             env.borrow_mut().set(let_stmt.name.value.clone(), val);
             None
         }
+        Statement::MultiLet(multi_let) => {
+            for (name, expr) in &multi_let.declarations {
+                let val = eval_expression(expr, env)?;
+                if is_error(&val) {
+                    return Some(val);
+                }
+                env.borrow_mut().set(name.value.clone(), val);
+            }
+            None
+        }
         Statement::Expression(expr_stmt) => expr_stmt
             .expression
             .as_ref()

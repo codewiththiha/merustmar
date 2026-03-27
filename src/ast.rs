@@ -82,6 +82,7 @@ impl std::fmt::Display for ExpressionStatement {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     Let(LetStatement),
+    MultiLet(MultiLetStatement),
     Return(ReturnStatement),
     Expression(ExpressionStatement),
     Block(BlockStatement),
@@ -94,6 +95,7 @@ impl Statement {
             Statement::Return(rs) => rs.token_literal(),
             Statement::Expression(es) => es.token_literal(),
             Statement::Block(bs) => bs.token_literal(),
+            Statement::MultiLet(mls) => mls.token_literal(),
         }
     }
 }
@@ -105,7 +107,31 @@ impl std::fmt::Display for Statement {
             Statement::Return(rs) => write!(f, "{}", rs),
             Statement::Expression(es) => write!(f, "{}", es),
             Statement::Block(bs) => write!(f, "{}", bs),
+            Statement::MultiLet(mls) => write!(f, "{}", mls),
         }
+    }
+}
+// MultiLetStatement
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct MultiLetStatement {
+    pub token: Token, // The first identifier token
+    pub declarations: Vec<(Identifier, Expression)>,
+}
+
+impl MultiLetStatement {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for MultiLetStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut decl_strings = Vec::new();
+        for (name, value) in &self.declarations {
+            decl_strings.push(format!("{} = {}", name.value, value));
+        }
+        write!(f, "{} လို့ထား။", decl_strings.join(", "))
     }
 }
 
