@@ -20,6 +20,7 @@ x + y။
   \"foobar\"
 \"Hello World\"
   [1, 2]။
+  {\"foo\": \"bar\"}
 ";
 
     let tests = vec![
@@ -104,6 +105,11 @@ x + y။
         (TokenType::Int, "2"),
         (TokenType::RBRACKET, "]"),
         (TokenType::Semicolon, "။"),
+        (TokenType::LBrace, "{"),
+        (TokenType::String, "foo"),
+        (TokenType::Colon, ":"),
+        (TokenType::String, "bar"),
+        (TokenType::RBrace, "}"),
         (TokenType::Eof, ""),
     ];
 

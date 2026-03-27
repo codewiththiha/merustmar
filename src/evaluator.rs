@@ -1,5 +1,5 @@
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::{cell::RefCell, collections::HashMap};
 
 use crate::{
     ast::{
@@ -8,7 +8,7 @@ use crate::{
     },
     builtins,
     environment::Environment,
-    object::{Function, Object},
+    object::{Function, HashPair, Object},
 };
 
 fn eval_identifier(node: &crate::ast::Identifier, env: &Rc<RefCell<Environment>>) -> Object {
@@ -175,6 +175,7 @@ pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Opt
                 env: Rc::clone(env), // ← shared pointer, NOT deep copy
             }))
         }
+        Expression::HashLiteral(hl) => eval_hash_literal(hl, env),
         Expression::CallExpression(ce) => eval_call_expression(ce, env),
         Expression::StringLiteral(sl) => Some(Object::String(sl.value.clone())),
         Expression::ArrayLiteral(al) => {
@@ -205,15 +206,67 @@ pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Opt
     }
 }
 
+fn eval_hash_literal(
+    node: &crate::ast::HashLiteral,
+    env: &Rc<RefCell<Environment>>,
+) -> Option<Object> {
+    let mut pairs = HashMap::new();
+
+    for (key_node, value_node) in &node.pairs {
+        let key = eval_expression(key_node, env)?;
+        if is_error(&key) {
+            return Some(key);
+        }
+
+        let hash_key = match key.hash_key() {
+            Some(hk) => hk,
+            None => {
+                return Some(Object::ErrorObj(format!(
+                    "unusable as hash key: {}",
+                    key.object_type()
+                )));
+            }
+        };
+
+        let value = eval_expression(value_node, env)?;
+        if is_error(&value) {
+            return Some(value);
+        }
+
+        pairs.insert(hash_key, HashPair { key, value });
+    }
+
+    Some(Object::Hash(pairs))
+}
+
 fn eval_index_expression(left: Object, index: Object) -> Object {
     // So parser will parse even index's expression results in string or other objects that's not
     // Integer , this is the part that catch that error.
     match (&left, &index) {
         (Object::Array(_), Object::Integer(_)) => eval_array_index_expression(left, index),
+        (Object::Hash(_), _) => eval_hash_index_expression(left, index),
         _ => Object::ErrorObj(format!(
             "index operator not supported: {}",
             left.object_type()
         )),
+    }
+}
+
+fn eval_hash_index_expression(hash: Object, index: Object) -> Object {
+    let Object::Hash(pairs) = hash else {
+        return Object::Null;
+    };
+
+    let hash_key = match index.hash_key() {
+        Some(hk) => hk,
+        None => {
+            return Object::ErrorObj(format!("unusable as hash key: {}", index.object_type()));
+        }
+    };
+
+    match pairs.get(&hash_key) {
+        Some(pair) => pair.value.clone(),
+        None => Object::Null,
     }
 }
 

@@ -54,19 +54,6 @@ fn builtin_last(args: Vec<Object>) -> Object {
         )),
     }
 }
-
-fn check_arg_count(expected: usize, args: &[Object]) -> Option<Object> {
-    if args.len() != expected {
-        Some(Object::ErrorObj(format!(
-            "wrong number of arguments. got={}, want={}",
-            args.len(),
-            expected
-        )))
-    } else {
-        None
-    }
-}
-
 fn builtin_rest(args: Vec<Object>) -> Object {
     if let Some(err) = check_arg_count(1, &args) {
         return err;
@@ -105,5 +92,19 @@ fn builtin_print(args: Vec<Object>) -> Object {
     for arg in args {
         println!("{}", arg.inspect())
     }
-    Object::Null
+    Object::String("".to_string())
+}
+
+// Helpers
+
+fn check_arg_count(expected: usize, args: &[Object]) -> Option<Object> {
+    if args.len() != expected {
+        Some(Object::ErrorObj(format!(
+            "wrong number of arguments. got={}, want={}",
+            args.len(),
+            expected
+        )))
+    } else {
+        None
+    }
 }

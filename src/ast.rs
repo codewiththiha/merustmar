@@ -15,6 +15,7 @@ pub enum Expression {
     StringLiteral(StringLiteral),
     ArrayLiteral(ArrayLiteral),
     IndexExpression(IndexExpression),
+    HashLiteral(HashLiteral),
 }
 
 impl Expression {
@@ -31,6 +32,7 @@ impl Expression {
             Expression::StringLiteral(sl) => sl.token_literal(),
             Expression::ArrayLiteral(al) => al.token_literal(),
             Expression::IndexExpression(ie) => ie.token_literal(),
+            Expression::HashLiteral(hl) => hl.token_literal(),
         }
     }
 }
@@ -49,6 +51,7 @@ impl std::fmt::Display for Expression {
             Expression::StringLiteral(sl) => write!(f, "{}", sl),
             Expression::ArrayLiteral(al) => write!(f, "{}", al),
             Expression::IndexExpression(ie) => write!(f, "{}", ie),
+            Expression::HashLiteral(hl) => write!(f, "{}", hl),
         }
     }
 }
@@ -546,5 +549,33 @@ impl std::fmt::Display for IndexExpression {
             write!(f, "{}", index)?;
         }
         write!(f, "])")
+    }
+}
+
+// HashLiterals
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct HashLiteral {
+    pub token: Token, // the '{' token
+    pub pairs: Vec<(Expression, Expression)>,
+}
+
+impl HashLiteral {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for HashLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{")?;
+        let mut iter = self.pairs.iter();
+        if let Some((key, value)) = iter.next() {
+            write!(f, "{}:{}", key, value)?;
+            for (key, value) in iter {
+                write!(f, ", {}:{}", key, value)?;
+            }
+        }
+        write!(f, "}}")
     }
 }

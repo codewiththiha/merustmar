@@ -765,3 +765,116 @@ fn test_array_index_expressions() {
         }
     }
 }
+
+// ============================================================================
+// Test: Hash Literals
+// ============================================================================
+
+#[test]
+fn test_hash_literals() {
+    let input = r#"ထား two = "two"။
+    {
+        "one": 10 - 9,
+        two: 1 + 1,
+        "thr" + "ee": 6 / 2,
+        4: 4,
+        မှန်: 5,
+        မှား: 6
+    }"#;
+
+    let evaluated = test_eval(input);
+
+    match evaluated {
+        Some(Object::Hash(pairs)) => {
+            let expected: Vec<(Object, i64)> = vec![
+                (Object::String("one".to_string()), 1),
+                (Object::String("two".to_string()), 2),
+                (Object::String("three".to_string()), 3),
+                (Object::Integer(4), 4),
+                (Object::Boolean(true), 5),
+                (Object::Boolean(false), 6),
+            ];
+
+            assert_eq!(
+                pairs.len(),
+                expected.len(),
+                "Hash has wrong number of pairs. got={}",
+                pairs.len()
+            );
+
+            for (key_obj, expected_value) in &expected {
+                let hash_key = key_obj.hash_key().expect("key should be hashable");
+                let pair = pairs.get(&hash_key).expect("no pair for given key");
+                assert!(test_integer_object(
+                    &Some(pair.value.clone()),
+                    *expected_value
+                ));
+            }
+        }
+        other => panic!("object is not Hash. got={:?}", other),
+    }
+}
+
+// ============================================================================
+// Test: Hash Index Expressions
+// ============================================================================
+
+#[test]
+fn test_hash_index_expressions() {
+    enum Expected {
+        Int(i64),
+        Null,
+    }
+
+    struct Test {
+        input: &'static str,
+        expected: Expected,
+    }
+
+    let tests = vec![
+        Test {
+            input: r#"{"foo": 5}["foo"]"#,
+            expected: Expected::Int(5),
+        },
+        Test {
+            input: r#"{"foo": 5}["bar"]"#,
+            expected: Expected::Null,
+        },
+        Test {
+            input: r#"ထား key = "foo"။ {"foo": 5}[key]"#,
+            expected: Expected::Int(5),
+        },
+        Test {
+            input: r#"{}["foo"]"#,
+            expected: Expected::Null,
+        },
+        Test {
+            input: r#"{5: 5}[5]"#,
+            expected: Expected::Int(5),
+        },
+        Test {
+            input: r#"{မှန်: 5}[မှန်]"#,
+            expected: Expected::Int(5),
+        },
+        Test {
+            input: r#"{မှား: 5}[မှား]"#,
+            expected: Expected::Int(5),
+        },
+    ];
+
+    for (i, tt) in tests.iter().enumerate() {
+        let evaluated = test_eval(tt.input);
+        match &tt.expected {
+            Expected::Int(expected_val) => {
+                if !test_integer_object(&evaluated, *expected_val) {
+                    panic!("test[{}] failed for input '{}'", i, tt.input);
+                }
+            }
+            Expected::Null => {
+                if !test_null_object(&evaluated) {
+                    panic!("test[{}] failed for input '{}'", i, tt.input);
+                }
+            }
+        }
+    }
+}

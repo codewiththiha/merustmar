@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{BlockStatement, Identifier},
@@ -15,7 +15,7 @@ pub struct Function {
     pub env: Rc<RefCell<Environment>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ObjectType {
     Integer,
     Boolean,
@@ -26,6 +26,7 @@ pub enum ObjectType {
     String,
     Builtin,
     Array,
+    Hash,
 }
 
 impl std::fmt::Display for ObjectType {
@@ -40,6 +41,7 @@ impl std::fmt::Display for ObjectType {
             ObjectType::String => write!(f, "STRING"),
             ObjectType::Builtin => write!(f, "BUILTIN"),
             ObjectType::Array => write!(f, "ARRAY"),
+            ObjectType::Hash => write!(f, "HASH"),
         }
     }
 }
@@ -55,6 +57,7 @@ pub enum Object {
     String(String),
     Builtin(BuiltinFunction),
     Array(Vec<Object>),
+    Hash(HashMap<HashKey, HashPair>),
 }
 
 // this entire thing's just necessary cuz mf BuiltinFunction causing some chaos
@@ -71,6 +74,7 @@ impl PartialEq for Object {
             // Two builtins are "equal" only if they point to the same function
             (Object::Builtin(a), Object::Builtin(b)) => std::ptr::fn_addr_eq(*a, *b),
             (Object::Array(a), Object::Array(b)) => a == b,
+            (Object::Hash(a), Object::Hash(b)) => a == b,
             _ => false,
         }
     }
@@ -88,6 +92,31 @@ impl Object {
             Object::String(_) => ObjectType::String,
             Object::Builtin(_) => ObjectType::Builtin,
             Object::Array(_) => ObjectType::Array,
+            Object::Hash(_) => ObjectType::Hash,
+        }
+    }
+
+    pub fn hash_key(&self) -> Option<HashKey> {
+        match self {
+            Object::Integer(i) => Some(HashKey {
+                object_type: ObjectType::Integer,
+                value: *i as u64,
+            }),
+            Object::Boolean(b) => Some(HashKey {
+                object_type: ObjectType::Boolean,
+                value: if *b { 1 } else { 0 },
+            }),
+            Object::String(s) => {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut hasher = DefaultHasher::new();
+                s.hash(&mut hasher);
+                Some(HashKey {
+                    object_type: ObjectType::String,
+                    value: hasher.finish(),
+                })
+            }
+            _ => None,
         }
     }
 
@@ -108,6 +137,13 @@ impl Object {
                 let els: Vec<String> = elements.iter().map(|e| e.inspect()).collect();
                 format!("[{}]", els.join(", "))
             }
+            Object::Hash(pairs) => {
+                let pair_strs: Vec<String> = pairs
+                    .values()
+                    .map(|pair| format!("{}: {}", pair.key.inspect(), pair.value.inspect()))
+                    .collect();
+                format!("{{{}}}", pair_strs.join(", "))
+            }
         }
     }
 }
@@ -116,6 +152,20 @@ impl std::fmt::Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.inspect())
     }
+}
+
+//// Hashes
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct HashKey {
+    pub object_type: ObjectType,
+    pub value: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct HashPair {
+    pub key: Object,
+    pub value: Object,
 }
 
 //// Version 2

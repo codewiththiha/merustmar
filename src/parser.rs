@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     ast::{
         ArrayLiteral, BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement,
-        FunctionLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
+        FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
         IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement,
         StringLiteral,
     },
@@ -80,6 +80,7 @@ impl<'a> Parser<'a> {
         parser.register_prefix(TokenType::Function, Parser::parse_function_literal);
         parser.register_prefix(TokenType::String, Parser::parse_string_literal);
         parser.register_prefix(TokenType::LBRACKET, Parser::parse_array_literal);
+        parser.register_prefix(TokenType::LBrace, Parser::parse_hash_literal);
 
         // InfixFns
         parser.register_infix(TokenType::Plus, Parser::parse_infix_expression);
@@ -505,6 +506,38 @@ impl<'a> Parser<'a> {
             left: Some(Box::new(left)),
             index: index.map(Box::new),
         }))
+    }
+
+    /// Parse hash literal: {"key": value, "key2": value2}
+    /// The `{` is already consumed as cur_token.
+    pub fn parse_hash_literal(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let mut pairs = Vec::new();
+
+        while !self.peek_token_is(TokenType::RBrace) {
+            self.next_token();
+            let key = self.parse_expression(Precedence::Lowest)?;
+
+            if !self.expect_peek(TokenType::Colon) {
+                return None;
+            }
+
+            self.next_token();
+            let value = self.parse_expression(Precedence::Lowest)?;
+
+            pairs.push((key, value));
+
+            // After each pair, expect either } or ,
+            if !self.peek_token_is(TokenType::RBrace) && !self.expect_peek(TokenType::Comma) {
+                return None;
+            }
+        }
+
+        if !self.expect_peek(TokenType::RBrace) {
+            return None;
+        }
+
+        Some(Expression::HashLiteral(HashLiteral { token, pairs }))
     }
 
     // Helpers
