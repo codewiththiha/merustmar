@@ -471,9 +471,14 @@ pub fn eval_loop_expression(
 
             let result = eval_block_statement(body_block, env);
             if let Some(res) = result {
-                if matches!(res, Object::ReturnValue(_) | Object::ErrorObj(_)) {
+                if let Object::ReturnValue(val) = res {
+                    return Some(*val);
+                }
+
+                if let Object::ErrorObj(_) = res {
                     return Some(res);
                 }
+
                 last_eval = Some(res);
             }
         }
@@ -483,7 +488,11 @@ pub fn eval_loop_expression(
     loop {
         let result = eval_block_statement(body_block, env);
         if let Some(res) = result {
-            if matches!(res, Object::ReturnValue(_) | Object::ErrorObj(_)) {
+            if let Object::ReturnValue(val) = res {
+                return Some(*val);
+            }
+
+            if let Object::ErrorObj(_) = res {
                 return Some(res);
             }
         }
