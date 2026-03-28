@@ -90,7 +90,10 @@ fn builtin_print(args: Vec<Object>) -> Object {
         return Object::ErrorObj(format!("Expected at least 1 argument got 0"));
     }
     for arg in args {
-        println!("{}", arg.inspect())
+        match arg {
+            Object::String(s) => print!("{}", s),
+            _ => print!("{}", arg.inspect()),
+        }
     }
     Object::String("".to_string())
 }

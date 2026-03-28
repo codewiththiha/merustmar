@@ -16,6 +16,7 @@ pub enum Expression {
     ArrayLiteral(ArrayLiteral),
     IndexExpression(IndexExpression),
     HashLiteral(HashLiteral),
+    LoopExpression(LoopExpression),
 }
 
 impl Expression {
@@ -33,6 +34,7 @@ impl Expression {
             Expression::ArrayLiteral(al) => al.token_literal(),
             Expression::IndexExpression(ie) => ie.token_literal(),
             Expression::HashLiteral(hl) => hl.token_literal(),
+            Expression::LoopExpression(le) => le.token_literal(),
         }
     }
 }
@@ -52,9 +54,43 @@ impl std::fmt::Display for Expression {
             Expression::ArrayLiteral(al) => write!(f, "{}", al),
             Expression::IndexExpression(ie) => write!(f, "{}", ie),
             Expression::HashLiteral(hl) => write!(f, "{}", hl),
+            Expression::LoopExpression(le) => write!(f, "{}", le),
         }
     }
 }
+// Loop Expression
+#[derive(PartialEq, Debug, Clone)]
+pub struct LoopExpression {
+    pub token: Token, // Either MyanmarInt ('5') or Loop ('ပတ်')
+    pub count: Option<i64>,
+    pub condition: Option<Box<Expression>>,
+    pub body: Option<BlockStatement>,
+}
+
+impl LoopExpression {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for LoopExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(c) = self.count {
+            write!(f, "{} ခါပတ် ", c)?;
+        } else {
+            write!(f, "ပတ် ")?;
+            if let Some(ref cond) = self.condition {
+                write!(f, "{} ", cond)?;
+            }
+        }
+        if let Some(ref b) = self.body {
+            write!(f, "{}", b)?;
+        }
+        Ok(())
+    }
+}
+
+// Main Expression
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExpressionStatement {

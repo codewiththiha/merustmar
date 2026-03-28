@@ -185,6 +185,7 @@ pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Opt
             }
             Some(Object::Array(elements))
         }
+        Expression::LoopExpression(le) => eval_loop_expression(le, env),
 
         Expression::IndexExpression(ie) => {
             let left = ie
@@ -435,4 +436,56 @@ pub fn eval_block_statement(
 
 fn is_error(obj: &Object) -> bool {
     matches!(obj, Object::ErrorObj(_))
+}
+
+pub fn eval_loop_expression(
+    loop_exp: &crate::ast::LoopExpression,
+    env: &Rc<RefCell<Environment>>,
+) -> Option<Object> {
+    let mut last_eval = Some(Object::Null);
+    let body_block = loop_exp.body.as_ref()?;
+
+    // (N-times Loop)
+    if let Some(count) = loop_exp.count {
+        for _ in 0..count {
+            let result = eval_block_statement(body_block, env);
+            if let Some(res) = result {
+                if matches!(res, Object::ReturnValue(_) | Object::ErrorObj(_)) {
+                    return Some(res);
+                }
+                last_eval = Some(res);
+            }
+        }
+        return last_eval;
+    }
+
+    if let Some(condition) = &loop_exp.condition {
+        loop {
+            let cond_val = eval_expression(condition, env)?;
+            if is_error(&cond_val) {
+                return Some(cond_val);
+            }
+            if !is_truthy(&cond_val) {
+                break;
+            }
+
+            let result = eval_block_statement(body_block, env);
+            if let Some(res) = result {
+                if matches!(res, Object::ReturnValue(_) | Object::ErrorObj(_)) {
+                    return Some(res);
+                }
+                last_eval = Some(res);
+            }
+        }
+        return last_eval;
+    }
+
+    loop {
+        let result = eval_block_statement(body_block, env);
+        if let Some(res) = result {
+            if matches!(res, Object::ReturnValue(_) | Object::ErrorObj(_)) {
+                return Some(res);
+            }
+        }
+    }
 }

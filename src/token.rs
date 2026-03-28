@@ -46,6 +46,11 @@ pub enum TokenType {
 
     Colon,
     LetSuffix,
+
+    // Loops
+    Loop,
+    TimesLoop,
+    MyanmarInt,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -72,6 +77,8 @@ impl Token {
             "မှန်" => TokenType::True,
             "မှား" => TokenType::False,
             "လို့ထား" => TokenType::LetSuffix,
+            "ပတ်" => TokenType::Loop,
+            "ခါပတ်" => TokenType::TimesLoop,
             _ => TokenType::Ident,
         }
     }

@@ -23,6 +23,20 @@ impl<'a> Lexer<'a> {
         lexer
     }
 
+    pub fn read_myanmar_number(&mut self) -> String {
+        let mut val: i64 = 0;
+        while let Some(ch) = self.ch {
+            if is_myanmar_digit(ch) {
+                let digit = ch as u32 - '\u{1040}' as u32;
+                val = val * 10 + digit as i64;
+                self.read_char();
+            } else {
+                break;
+            }
+        }
+        val.to_string() // Converts ၅ back to "5" for the parser
+    }
+
     pub fn read_number(&mut self) -> String {
         let start = self.position;
         while let Some(ch) = self.ch {
@@ -36,16 +50,29 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn read_string(&mut self) -> String {
-        let start_position = self.position.saturating_add(1);
+        let mut string = String::new();
         loop {
             self.read_char();
-            // Safer and neater
             match self.ch {
                 Some('"') | None => break,
-                _ => {}
+                Some('\\') => {
+                    self.read_char();
+                    match self.ch {
+                        Some('n') => string.push('\n'),
+                        Some('t') => string.push('\t'),
+                        Some('"') => string.push('"'),
+                        Some('\\') => string.push('\\'),
+                        Some(ch) => {
+                            string.push('\\');
+                            string.push(ch);
+                        }
+                        None => break,
+                    }
+                }
+                Some(ch) => string.push(ch),
             }
         }
-        self.input[start_position..self.position].to_string()
+        string
     }
 
     pub fn read_char(&mut self) {
@@ -95,6 +122,10 @@ impl<'a> Lexer<'a> {
                 } else {
                     Token::new(TokenType::Assign, "=".to_string())
                 }
+            }
+            Some(ch) if is_myanmar_digit(ch) => {
+                let literal = self.read_myanmar_number();
+                return Token::new(TokenType::MyanmarInt, literal);
             }
             Some('။') => Token::new(TokenType::Semicolon, "။".to_string()),
             Some('(') => Token::new(TokenType::LParen, "(".to_string()),
@@ -165,22 +196,25 @@ pub fn is_letter(ch: char) -> bool {
     if ch == '။' {
         return false;
     }
-    // ASCII: letters,underscore
     if ch.is_ascii() {
         return ch.is_ascii_alphabetic() || ch == '_';
     }
 
-    // Myanmar Unicode block (U+1000..=U+109F)
-    // This includes consonants, vowels, digits, AND combining marks
-    // All of these should be valid in Myanmar identifiers/keywords
     if ('\u{1000}'..='\u{109F}').contains(&ch) {
+        // Exclude Myanmar digits so they can be processed as numbers
+        // just like we did for ။
+        if is_myanmar_digit(ch) {
+            return false;
+        }
         return true;
     }
-
-    // Fallback: other scripts (Greek, Arabic, etc.)
     ch.is_alphabetic() || ch == '_'
 }
 
 pub fn is_digit(ch: char) -> bool {
     ch.is_ascii_digit()
+}
+
+pub fn is_myanmar_digit(ch: char) -> bool {
+    ('\u{1040}'..='\u{1049}').contains(&ch)
 }

@@ -4,7 +4,7 @@ use crate::{
     ast::{
         ArrayLiteral, BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement,
         FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
-        IntegerLiteral, LetStatement, MultiLetStatement, PrefixExpression, Program,
+        IntegerLiteral, LetStatement, LoopExpression, MultiLetStatement, PrefixExpression, Program,
         ReturnStatement, Statement, StringLiteral,
     },
     lexer::Lexer,
@@ -81,6 +81,8 @@ impl<'a> Parser<'a> {
         parser.register_prefix(TokenType::String, Parser::parse_string_literal);
         parser.register_prefix(TokenType::LBRACKET, Parser::parse_array_literal);
         parser.register_prefix(TokenType::LBrace, Parser::parse_hash_literal);
+        parser.register_prefix(TokenType::MyanmarInt, Parser::parse_n_times_loop);
+        parser.register_prefix(TokenType::Loop, Parser::parse_while_or_inf_loop);
 
         // InfixFns
         parser.register_infix(TokenType::Plus, Parser::parse_infix_expression);
@@ -170,6 +172,53 @@ impl<'a> Parser<'a> {
         Some(Statement::MultiLet(MultiLetStatement {
             token: start_token,
             declarations,
+        }))
+    }
+
+    pub fn parse_n_times_loop(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let count = token.literal.parse::<i64>().ok()?;
+
+        if !self.expect_peek(TokenType::TimesLoop) {
+            return None;
+        }
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
+
+        let body = self.parse_block_statement();
+
+        Some(Expression::LoopExpression(LoopExpression {
+            token,
+            count: Some(count),
+            condition: None,
+            body,
+        }))
+    }
+
+    pub fn parse_while_or_inf_loop(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let mut condition = None;
+
+        if self.peek_token_is(TokenType::LBrace) {
+            // Infinite loop syntax: ပတ် {}
+            self.next_token();
+        } else {
+            // While loop syntax: ပတ် condition {}
+            self.next_token();
+            condition = self.parse_expression(Precedence::Lowest).map(Box::new);
+            if !self.expect_peek(TokenType::LBrace) {
+                return None;
+            }
+        }
+
+        let body = self.parse_block_statement();
+
+        Some(Expression::LoopExpression(LoopExpression {
+            token,
+            count: None,
+            condition,
+            body,
         }))
     }
 
