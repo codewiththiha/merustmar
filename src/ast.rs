@@ -122,6 +122,7 @@ pub enum Statement {
     Return(ReturnStatement),
     Expression(ExpressionStatement),
     Block(BlockStatement),
+    Reassign(ReassignStatement),
 }
 
 impl Statement {
@@ -132,6 +133,7 @@ impl Statement {
             Statement::Expression(es) => es.token_literal(),
             Statement::Block(bs) => bs.token_literal(),
             Statement::MultiLet(mls) => mls.token_literal(),
+            Statement::Reassign(rs) => rs.token_literal(),
         }
     }
 }
@@ -144,6 +146,7 @@ impl std::fmt::Display for Statement {
             Statement::Expression(es) => write!(f, "{}", es),
             Statement::Block(bs) => write!(f, "{}", bs),
             Statement::MultiLet(mls) => write!(f, "{}", mls),
+            Statement::Reassign(rs) => write!(f, "{}", rs),
         }
     }
 }
@@ -639,5 +642,25 @@ impl std::fmt::Display for HashLiteral {
             }
         }
         write!(f, "}}")
+    }
+}
+
+// ReassignStatement: x = newvalue။
+#[derive(Debug, PartialEq, Clone)]
+pub struct ReassignStatement {
+    pub token: Token,
+    pub name: Identifier,
+    pub value: Expression,
+}
+
+impl ReassignStatement {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for ReassignStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} = {}", self.name.value, self.value)
     }
 }

@@ -5,7 +5,7 @@ use crate::{
         ArrayLiteral, BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement,
         FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
         IntegerLiteral, LetStatement, LoopExpression, MultiLetStatement, PrefixExpression, Program,
-        ReturnStatement, Statement, StringLiteral,
+        ReassignStatement, ReturnStatement, Statement, StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -121,58 +121,10 @@ impl<'a> Parser<'a> {
             TokenType::Return => self.parse_return_statement(),
             // If it's an Identifier AND the next token is '=', it is NOT a standard expression.
             TokenType::Ident if self.peek_token_is(TokenType::Assign) => {
-                self.parse_multi_let_statement()
+                self.parse_ident_assign_statement()
             }
             _ => self.parse_expression_statement(),
         }
-    }
-
-    pub fn parse_multi_let_statement(&mut self) -> Option<Statement> {
-        let mut declarations = Vec::new();
-        let start_token = self.cur_token.clone(); // Capture the first identifier
-
-        loop {
-            // Capture the identifier
-            let name = Identifier {
-                token: self.cur_token.clone(),
-                value: self.cur_token.literal.clone(),
-            };
-
-            // Expect the '='
-            if !self.expect_peek(TokenType::Assign) {
-                return None;
-            }
-            self.next_token(); // Move past '='
-
-            // Parse the expression value
-            let value = self.parse_expression(Precedence::Lowest)?;
-            declarations.push((name, value));
-
-            // Check if there are more commas
-            if self.peek_token_is(TokenType::Comma) {
-                self.next_token(); // Move to ','
-                if !self.expect_peek(TokenType::Ident) {
-                    return None;
-                }
-            } else {
-                break; // No comma, we are done collecting pairs
-            }
-        }
-
-        // Expect the closing 'လို့ထား'
-        if !self.expect_peek(TokenType::LetSuffix) {
-            return None;
-        }
-
-        // Handle optional semicolon
-        if self.peek_token_is(TokenType::Semicolon) {
-            self.next_token();
-        }
-
-        Some(Statement::MultiLet(MultiLetStatement {
-            token: start_token,
-            declarations,
-        }))
     }
 
     pub fn parse_n_times_loop(&mut self) -> Option<Expression> {
@@ -639,6 +591,81 @@ impl<'a> Parser<'a> {
         }
 
         Some(Expression::HashLiteral(HashLiteral { token, pairs }))
+    }
+
+    /// Parses `ident = expr` and then disambiguates:
+    ///   - peek is `။` (Semicolon) or EOF  →  Reassignment
+    ///   - peek is `,` or `လို့ထား` (LetSuffix)  →  Multi-let declaration
+    pub fn parse_ident_assign_statement(&mut self) -> Option<Statement> {
+        let start_token = self.cur_token.clone();
+
+        // Capture the first identifier
+        let first_name = Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        };
+
+        // Expect '='
+        if !self.expect_peek(TokenType::Assign) {
+            return None;
+        }
+
+        // Move past '=' and parse the expression
+        self.next_token();
+        let first_value = self.parse_expression(Precedence::Lowest)?;
+
+        // Disambiguate based on what follows
+        if self.peek_token_is(TokenType::Comma) || self.peek_token_is(TokenType::LetSuffix) {
+            // ── It's a multi-let declaration ──
+            let mut declarations = vec![(first_name, first_value)];
+
+            // Collect additional comma-separated pairs
+            while self.peek_token_is(TokenType::Comma) {
+                self.next_token(); // consume ','
+                if !self.expect_peek(TokenType::Ident) {
+                    return None;
+                }
+
+                let name = Identifier {
+                    token: self.cur_token.clone(),
+                    value: self.cur_token.literal.clone(),
+                };
+
+                if !self.expect_peek(TokenType::Assign) {
+                    return None;
+                }
+
+                self.next_token(); // move past '='
+                let value = self.parse_expression(Precedence::Lowest)?;
+                declarations.push((name, value));
+            }
+
+            // Expect closing 'လို့ထား'
+            if !self.expect_peek(TokenType::LetSuffix) {
+                return None;
+            }
+
+            // Optional semicolon after လို့ထား
+            if self.peek_token_is(TokenType::Semicolon) {
+                self.next_token();
+            }
+
+            Some(Statement::MultiLet(MultiLetStatement {
+                token: start_token,
+                declarations,
+            }))
+        } else {
+            // ── It's a reassignment: x = value။ ──
+            if self.peek_token_is(TokenType::Semicolon) {
+                self.next_token(); // consume ။
+            }
+
+            Some(Statement::Reassign(ReassignStatement {
+                token: start_token,
+                name: first_name,
+                value: first_value,
+            }))
+        }
     }
 
     // Helpers
