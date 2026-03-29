@@ -23,6 +23,17 @@ impl Environment {
         }))
     }
 
+    pub fn reassign(&mut self, name: String, val: Object) -> Result<(), String> {
+        if self.store.contains_key(&name) {
+            self.store.insert(name, val);
+            Ok(())
+        } else if let Some(ref outer) = self.outer {
+            outer.borrow_mut().reassign(name, val)
+        } else {
+            Err(format!("Cannot reassign undefined identifier: {}", name))
+        }
+    }
+
     pub fn get(&self, name: &str) -> Option<Object> {
         self.store
             .get(name)

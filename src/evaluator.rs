@@ -400,6 +400,20 @@ pub fn eval_statement(statement: &Statement, env: &Rc<RefCell<Environment>>) -> 
             }
             None
         }
+        Statement::Reassign(reassign_stmt) => {
+            let val = eval_expression(&reassign_stmt.value, env)?;
+
+            if is_error(&val) {
+                return Some(val);
+            }
+
+            let name = reassign_stmt.name.value.clone();
+            if let Err(msg) = env.borrow_mut().reassign(name, val) {
+                return Some(Object::ErrorObj(msg));
+            }
+
+            None
+        }
         Statement::Expression(expr_stmt) => expr_stmt
             .expression
             .as_ref()
