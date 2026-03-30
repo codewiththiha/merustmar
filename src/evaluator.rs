@@ -148,7 +148,12 @@ pub fn eval_infix_integer_expression(left: &i64, right: &i64, operator: &str) ->
         "+" => Object::Integer(left + right),
         "-" => Object::Integer(left - right),
         "*" => Object::Integer(left * right),
-        "/" => Object::Integer(left / right),
+        "/" => {
+            if *right == 0 {
+                return Object::ErrorObj("division by zero".to_string());
+            }
+            Object::Integer(left / right)
+        }
         ">" => Object::Boolean(left > right),
         "<" => Object::Boolean(left < right),
         "==" => Object::Boolean(left == right),
@@ -464,7 +469,10 @@ pub fn eval_loop_expression(
         for _ in 0..count {
             let result = eval_block_statement(body_block, env);
             if let Some(res) = result {
-                if matches!(res, Object::ReturnValue(_) | Object::ErrorObj(_)) {
+                if let Object::ReturnValue(val) = res {
+                    return Some(*val);
+                }
+                if let Object::ErrorObj(_) = &res {
                     return Some(res);
                 }
                 last_eval = Some(res);

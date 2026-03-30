@@ -60,6 +60,7 @@ fn builtin_rest(args: Vec<Object>) -> Object {
     }
 
     match &args[0] {
+        Object::Array(a) if a.is_empty() => Object::Null,
         Object::Array(a) => Object::Array(a[1..].to_vec()),
         _ => Object::ErrorObj(format!(
             "argument to `rest` must be ARRAY, got {}",

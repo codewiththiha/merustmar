@@ -466,7 +466,7 @@ impl<'a> Parser<'a> {
         let mut identifiers = Vec::new();
         if self.peek_token_is(TokenType::RParen) {
             self.next_token();
-            return None;
+            return Some(identifiers);
         }
         // this skip the lparen and get grab on the first real param
         self.next_token();
