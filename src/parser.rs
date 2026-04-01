@@ -119,12 +119,63 @@ impl<'a> Parser<'a> {
         match self.cur_token.token_type {
             TokenType::Let => self.parse_let_statement(),
             TokenType::Return => self.parse_return_statement(),
+            TokenType::Function if self.peek_token_is(TokenType::Ident) => {
+                self.parse_function_declaration()
+            }
             // If it's an Identifier AND the next token is '=', it is NOT a standard expression.
             TokenType::Ident if self.peek_token_is(TokenType::Assign) => {
                 self.parse_ident_assign_statement()
             }
             _ => self.parse_expression_statement(),
         }
+    }
+
+    pub fn parse_function_declaration(&mut self) -> Option<Statement> {
+        let fn_token = self.cur_token.clone(); // the ဖန်ရှင် token
+
+        // Next token is the function name
+        if !self.expect_peek(TokenType::Ident) {
+            return None;
+        }
+
+        let name = Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        };
+
+        // Expect '('
+        if !self.expect_peek(TokenType::LParen) {
+            return None;
+        }
+
+        let parameters = self.parse_function_parameters();
+
+        // Expect '{'
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
+
+        let body = self.parse_block_statement();
+
+        // Build the function literal expression
+        let function_literal = Expression::FunctionLiteral(FunctionLiteral {
+            token: fn_token,
+            parameters,
+            body,
+        });
+
+        // Desugar into a Let statement
+        let let_token = Token::new(TokenType::Let, "ထား".to_string());
+
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        Some(Statement::Let(LetStatement {
+            token: let_token,
+            name,
+            value: Some(function_literal),
+        }))
     }
 
     pub fn parse_n_times_loop(&mut self) -> Option<Expression> {
