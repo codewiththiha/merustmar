@@ -15,18 +15,22 @@ use crate::{
 #[derive(PartialOrd, PartialEq)]
 pub enum Precedence {
     Lowest = 0,
-    Equals = 1,      // ==
-    LessGreater = 2, // > or <
-    Sum = 3,         // +
-    Product = 4,     // *
-    Prefix = 5,      // -X or !X
-    Call = 6,        // myFunction(X)
-    Index = 7,
+    Or = 1,
+    And = 2,
+    Equals = 3,      // ==
+    LessGreater = 4, // > or <
+    Sum = 5,         // +
+    Product = 6,     // *
+    Prefix = 7,      // -X or !X
+    Call = 8,        // myFunction(X)
+    Index = 9,
 }
 
 impl Precedence {
     pub fn from_token_type(token_type: TokenType) -> Self {
         match token_type {
+            TokenType::Or => Precedence::Or,
+            TokenType::And => Precedence::And,
             TokenType::Eq => Precedence::Equals,
             TokenType::NotEq => Precedence::Equals,
             TokenType::Lt => Precedence::LessGreater,
@@ -35,6 +39,7 @@ impl Precedence {
             TokenType::Minus => Precedence::Sum,
             TokenType::Slash => Precedence::Product,
             TokenType::Asterisk => Precedence::Product,
+            TokenType::Percent => Precedence::Product,
             TokenType::LParen => Precedence::Call,
             TokenType::LBRACKET => Precedence::Index,
             _ => Precedence::Lowest,
@@ -95,6 +100,9 @@ impl<'a> Parser<'a> {
         parser.register_infix(TokenType::Gt, Parser::parse_infix_expression);
         parser.register_infix(TokenType::LParen, Parser::parse_call_expression);
         parser.register_infix(TokenType::LBRACKET, Parser::parse_index_expression);
+        parser.register_infix(TokenType::And, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::Or, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::Percent, Parser::parse_infix_expression);
 
         parser.next_token();
         parser.next_token();

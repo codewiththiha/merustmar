@@ -14,12 +14,16 @@ pub enum TokenType {
     Bang,
     Asterisk,
     Slash,
+    Percent,
 
     Lt,
     Gt,
 
     Eq,
     NotEq,
+
+    And,
+    Or,
 
     // Delimiters
     Comma,

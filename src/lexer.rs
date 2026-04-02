@@ -151,6 +151,23 @@ impl<'a> Lexer<'a> {
             Some('>') => Token::new(TokenType::Gt, ">".to_string()),
             Some('<') => Token::new(TokenType::Lt, "<".to_string()),
             Some('"') => Token::new(TokenType::String, self.read_string()),
+            Some('%') => Token::new(TokenType::Percent, "%".to_string()),
+            Some('&') => {
+                if self.peek_char() == Some('&') {
+                    self.read_char();
+                    Token::new(TokenType::And, "&&".to_string())
+                } else {
+                    Token::new(TokenType::Illegial, "&".to_string())
+                }
+            }
+            Some('|') => {
+                if self.peek_char() == Some('|') {
+                    self.read_char();
+                    Token::new(TokenType::Or, "||".to_string())
+                } else {
+                    Token::new(TokenType::Illegial, "|".to_string())
+                }
+            }
             // NOTICE how in this case we used explict return , cuz if we don't do that we might
             // end up scrolling to the end and execute self.read_char() which will increase the
             // read_position and cause conflicts and bugs (::D just experienced that for 1 hr)

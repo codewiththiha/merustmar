@@ -79,6 +79,37 @@ fn eval_infix_expression(
         return Some(left);
     }
 
+    // Short circuit logic
+    match infix.operator.as_str() {
+        "&&" => {
+            if !is_truthy(&left) {
+                return Some(Object::Boolean(false));
+            }
+            let right = infix
+                .right
+                .as_ref()
+                .and_then(|expr| eval_expression(expr, env))?;
+            if is_error(&right) {
+                return Some(right);
+            }
+            return Some(Object::Boolean(is_truthy(&right)));
+        }
+        "||" => {
+            if is_truthy(&left) {
+                return Some(Object::Boolean(true));
+            }
+            let right = infix
+                .right
+                .as_ref()
+                .and_then(|expr| eval_expression(expr, env))?;
+            if is_error(&right) {
+                return Some(right);
+            }
+            return Some(Object::Boolean(is_truthy(&right)));
+        }
+        _ => {}
+    }
+
     let right = infix
         .right
         .as_ref()
@@ -117,6 +148,8 @@ fn eval_infix_expression(
 pub fn eval_infix_string_expression(left: &String, right: &String, operator: &str) -> Object {
     match operator {
         "+" => Object::String(format!("{}{}", left, right)),
+        "==" => Object::Boolean(left == right),
+        "!=" => Object::Boolean(left != right),
         _ => Object::ErrorObj(format!("unknown operator: STRING {} STRING", operator)),
     }
 }
@@ -153,6 +186,12 @@ pub fn eval_infix_integer_expression(left: &i64, right: &i64, operator: &str) ->
                 return Object::ErrorObj("division by zero".to_string());
             }
             Object::Integer(left / right)
+        }
+        "%" => {
+            if *right == 0 {
+                return Object::ErrorObj("modulo by zero".to_string());
+            }
+            Object::Integer(left % right)
         }
         ">" => Object::Boolean(left > right),
         "<" => Object::Boolean(left < right),
