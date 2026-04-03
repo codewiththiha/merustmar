@@ -1,4 +1,8 @@
-use crate::object::Object;
+use std::{thread, time::Duration};
+
+use rand::Rng;
+
+use crate::{object::Object, terminal};
 
 pub fn get_builtin(name: &str) -> Option<Object> {
     match name {
@@ -8,6 +12,23 @@ pub fn get_builtin(name: &str) -> Option<Object> {
         "rest" => Some(Object::Builtin(builtin_rest)),
         "push" => Some(Object::Builtin(builtin_push)),
         "ရေး" => Some(Object::Builtin(builtin_print)),
+        // ── terminal ────────────────────────
+        "terminal_init" => Some(Object::Builtin(builtin_terminal_init)),
+        "terminal_end" => Some(Object::Builtin(builtin_terminal_end)),
+        "clear" => Some(Object::Builtin(builtin_clear)),
+        "terminal_size" => Some(Object::Builtin(builtin_terminal_size)),
+        "print_at" => Some(Object::Builtin(builtin_print_at)),
+        "print_at_center" => Some(Object::Builtin(builtin_print_at_center)),
+        "draw_border" => Some(Object::Builtin(builtin_draw_border)),
+        "flush" => Some(Object::Builtin(builtin_flush)),
+
+        // ── input ───────────────────────────
+        "read_key" => Some(Object::Builtin(builtin_read_key)),
+        "poll_key" => Some(Object::Builtin(builtin_poll_key)),
+
+        // ── utilities ───────────────────────
+        "sleep" => Some(Object::Builtin(builtin_sleep)),
+        "rand" => Some(Object::Builtin(builtin_rand)),
         _ => None,
     }
 }
@@ -97,6 +118,193 @@ fn builtin_print(args: Vec<Object>) -> Object {
         }
     }
     Object::String("".to_string())
+}
+
+//  Terminal builtins
+
+fn builtin_terminal_init(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(0, &args) {
+        return err;
+    }
+    match terminal::init() {
+        Ok(()) => Object::Null,
+        Err(e) => Object::ErrorObj(e),
+    }
+}
+
+fn builtin_terminal_end(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(0, &args) {
+        return err;
+    }
+    terminal::cleanup();
+    Object::Null
+}
+
+fn builtin_clear(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(0, &args) {
+        return err;
+    }
+    match terminal::clear_screen() {
+        Ok(()) => Object::Null,
+        Err(e) => Object::ErrorObj(e),
+    }
+}
+
+fn builtin_terminal_size(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(0, &args) {
+        return err;
+    }
+    match terminal::size() {
+        Ok((w, h)) => Object::Array(vec![Object::Integer(w as i64), Object::Integer(h as i64)]),
+        Err(e) => Object::ErrorObj(e),
+    }
+}
+
+fn builtin_flush(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(0, &args) {
+        return err;
+    }
+    match terminal::flush() {
+        Ok(()) => Object::Null,
+        Err(e) => Object::ErrorObj(e),
+    }
+}
+
+/// print_at(x, y, text)
+fn builtin_print_at(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(3, &args) {
+        return err;
+    }
+    let x = match &args[0] {
+        Object::Integer(v) => *v,
+        _ => return Object::ErrorObj("print_at: x must be INTEGER".into()),
+    };
+    let y = match &args[1] {
+        Object::Integer(v) => *v,
+        _ => return Object::ErrorObj("print_at: y must be INTEGER".into()),
+    };
+    let text = match &args[2] {
+        Object::String(s) => s.clone(),
+        other => other.inspect(),
+    };
+    match terminal::print_at(x as u16, y as u16, &text) {
+        Ok(()) => Object::Null,
+        Err(e) => Object::ErrorObj(e),
+    }
+}
+
+/// print_at_center(x, y, box_cols, box_rows, text)
+fn builtin_print_at_center(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(5, &args) {
+        return err;
+    }
+    let x = match &args[0] {
+        Object::Integer(v) => *v as u16,
+        _ => return Object::ErrorObj("print_at_center: x must be INTEGER".into()),
+    };
+    let y = match &args[1] {
+        Object::Integer(v) => *v as u16,
+        _ => return Object::ErrorObj("print_at_center: y must be INTEGER".into()),
+    };
+    let cols = match &args[2] {
+        Object::Integer(v) => *v as u16,
+        _ => return Object::ErrorObj("print_at_center: cols must be INTEGER".into()),
+    };
+    let rows = match &args[3] {
+        Object::Integer(v) => *v as u16,
+        _ => return Object::ErrorObj("print_at_center: rows must be INTEGER".into()),
+    };
+    let text = match &args[4] {
+        Object::String(s) => s.clone(),
+        other => other.inspect(),
+    };
+    match terminal::print_at_center(x, y, cols, rows, &text) {
+        Ok(()) => Object::Null,
+        Err(e) => Object::ErrorObj(e),
+    }
+}
+
+/// draw_border(cols, rows)  — centred on screen
+fn builtin_draw_border(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(2, &args) {
+        return err;
+    }
+    let cols = match &args[0] {
+        Object::Integer(v) => *v as u16,
+        _ => return Object::ErrorObj("draw_border: cols must be INTEGER".into()),
+    };
+    let rows = match &args[1] {
+        Object::Integer(v) => *v as u16,
+        _ => return Object::ErrorObj("draw_border: rows must be INTEGER".into()),
+    };
+    match terminal::draw_border(cols, rows) {
+        Ok(()) => Object::Null,
+        Err(e) => Object::ErrorObj(e),
+    }
+}
+
+//  Input builtins
+
+/// read_key() → string  (blocks until a key is pressed)
+fn builtin_read_key(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(0, &args) {
+        return err;
+    }
+    match terminal::read_key_blocking() {
+        Ok(k) => Object::String(k),
+        Err(e) => Object::ErrorObj(e),
+    }
+}
+
+/// poll_key(timeout_ms) → string | null
+fn builtin_poll_key(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    let ms = match &args[0] {
+        Object::Integer(v) => *v as u64,
+        _ => return Object::ErrorObj("poll_key: argument must be INTEGER (ms)".into()),
+    };
+    match terminal::poll_key(ms) {
+        Ok(Some(k)) => Object::String(k),
+        Ok(None) => Object::Null,
+        Err(e) => Object::ErrorObj(e),
+    }
+}
+
+//  Utility builtins
+
+/// sleep(ms)
+fn builtin_sleep(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    let ms = match &args[0] {
+        Object::Integer(v) => *v as u64,
+        _ => return Object::ErrorObj("sleep: argument must be INTEGER (ms)".into()),
+    };
+    thread::sleep(Duration::from_millis(ms));
+    Object::Null
+}
+
+/// rand(min, max) → integer   (inclusive both ends)
+fn builtin_rand(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(2, &args) {
+        return err;
+    }
+    let min = match &args[0] {
+        Object::Integer(v) => *v,
+        _ => return Object::ErrorObj("rand: min must be INTEGER".into()),
+    };
+    let max = match &args[1] {
+        Object::Integer(v) => *v,
+        _ => return Object::ErrorObj("rand: max must be INTEGER".into()),
+    };
+    if min > max {
+        return Object::ErrorObj(format!("rand: min ({}) > max ({})", min, max));
+    }
+    let val = rand::thread_rng().gen_range(min..=max);
+    Object::Integer(val)
 }
 
 // Helpers

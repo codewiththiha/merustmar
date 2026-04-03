@@ -9,6 +9,7 @@ mod object;
 mod parser;
 mod repl;
 mod runner;
+mod terminal;
 pub mod tests;
 mod token;
 

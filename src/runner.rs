@@ -1,7 +1,7 @@
 use crate::environment::Environment;
-use crate::evaluator;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
+use crate::{evaluator, terminal};
 use std::fs;
 
 pub fn run_file(path: &str) {
@@ -21,10 +21,12 @@ pub fn run_file(path: &str) {
     if !errors.is_empty() {
         // let mut stdout = io::stdout();
         print_parser_errors(errors);
+        terminal::cleanup();
         return;
     }
 
     let result = evaluator::eval_program(&program, &env);
+    terminal::cleanup();
 
     if let Some(obj) = result {
         println!("{}", obj.inspect());

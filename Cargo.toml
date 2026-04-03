@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+crossterm = "0.28"
+rand = "0.8"
 
 [profile.release]
 opt-level = "z"   # Optimize for size

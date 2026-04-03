@@ -119,6 +119,22 @@ fn eval_infix_expression(
         return Some(right);
     }
 
+    match (&left, &right, infix.operator.as_str()) {
+        // null == null → true
+        (Object::Null, Object::Null, "==") => return Some(Object::Boolean(true)),
+        // null != null → false
+        (Object::Null, Object::Null, "!=") => return Some(Object::Boolean(false)),
+        // null == anything → false
+        (Object::Null, _, "==") => return Some(Object::Boolean(false)),
+        // anything == null → false
+        (_, Object::Null, "==") => return Some(Object::Boolean(false)),
+        // null != anything → true
+        (Object::Null, _, "!=") => return Some(Object::Boolean(true)),
+        // anything != null → true
+        (_, Object::Null, "!=") => return Some(Object::Boolean(true)),
+        _ => {}
+    }
+
     match (&left, &right) {
         (Object::Integer(l), Object::Integer(r)) => {
             Some(eval_infix_integer_expression(l, r, &infix.operator))
