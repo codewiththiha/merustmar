@@ -749,7 +749,7 @@ impl<'a> Parser<'a> {
     pub fn peek_error(&mut self, t: TokenType) {
         let msg = format!(
             "expected next token to be {:?} got {:?} instead.",
-            t, self.cur_token.token_type
+            t, self.peek_token.token_type
         );
         self.errors.push(msg);
     }

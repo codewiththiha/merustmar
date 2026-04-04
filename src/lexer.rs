@@ -94,7 +94,7 @@ impl<'a> Lexer<'a> {
         let start_position = self.position;
 
         while let Some(ch) = self.ch {
-            if is_letter(ch) {
+            if is_letter(ch) || is_digit(ch) || is_myanmar_digit(ch) {
                 self.read_char();
             } else {
                 break;
