@@ -38,6 +38,7 @@ fn eval_bang_operator_expression(right: &Object) -> Object {
 fn eval_minus_operator_expression(right: &Object) -> Object {
     match right {
         Object::Integer(i) => Object::Integer(-i),
+        Object::Float(f) => Object::Float(-f),
         _ => Object::ErrorObj(format!("unknown operator: -{}", right.object_type())),
     }
 }
@@ -139,6 +140,15 @@ fn eval_infix_expression(
         (Object::Integer(l), Object::Integer(r)) => {
             Some(eval_infix_integer_expression(l, r, &infix.operator))
         }
+        (Object::Float(l), Object::Float(r)) => {
+            Some(eval_infix_float_expression(*l, *r, &infix.operator))
+        }
+        (Object::Integer(l), Object::Float(r)) => {
+            Some(eval_infix_float_expression(*l as f64, *r, &infix.operator))
+        }
+        (Object::Float(l), Object::Integer(r)) => {
+            Some(eval_infix_float_expression(*l, *r as f64, &infix.operator))
+        }
         (Object::String(l), Object::String(r)) => {
             Some(eval_infix_string_expression(l, r, &infix.operator))
         }
@@ -158,6 +168,31 @@ fn eval_infix_expression(
             infix.operator,
             right.object_type()
         ))),
+    }
+}
+
+pub fn eval_infix_float_expression(left: f64, right: f64, operator: &str) -> Object {
+    match operator {
+        "+" => Object::Float(left + right),
+        "-" => Object::Float(left - right),
+        "*" => Object::Float(left * right),
+        "/" => {
+            if right == 0.0 {
+                return Object::ErrorObj("division by zero".to_string());
+            }
+            Object::Float(left / right)
+        }
+        "%" => {
+            if right == 0.0 {
+                return Object::ErrorObj("modulo by zero".to_string());
+            }
+            Object::Float(left % right)
+        }
+        ">" => Object::Boolean(left > right),
+        "<" => Object::Boolean(left < right),
+        "==" => Object::Boolean(left == right),
+        "!=" => Object::Boolean(left != right),
+        _ => Object::ErrorObj(format!("unknown operator: {}", operator)),
     }
 }
 
@@ -220,6 +255,7 @@ pub fn eval_infix_integer_expression(left: &i64, right: &i64, operator: &str) ->
 pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Option<Object> {
     match expr {
         Expression::IntegerLiteral(il) => Some(Object::Integer(il.value)),
+        Expression::FloatLiteral(fl) => Some(Object::Float(fl.value)),
         Expression::Boolean(b) => Some(Object::Boolean(b.value)),
         Expression::Identifier(i) => Some(eval_identifier(i, env)),
         Expression::PrefixExpression(pe) => eval_prefix_expression(pe, env),

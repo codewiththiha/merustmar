@@ -27,12 +27,14 @@ pub enum ObjectType {
     Builtin,
     Array,
     Hash,
+    Float,
 }
 
 impl std::fmt::Display for ObjectType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ObjectType::Integer => write!(f, "INTEGER"),
+            ObjectType::Float => write!(f, "FLOAT"),
             ObjectType::Boolean => write!(f, "BOOLEAN"),
             ObjectType::Null => write!(f, "NULL"),
             ObjectType::ReturnValue => write!(f, "RETURN_VALUE"),
@@ -49,6 +51,7 @@ impl std::fmt::Display for ObjectType {
 #[derive(Debug, Clone)]
 pub enum Object {
     Integer(i64),
+    Float(f64),
     Boolean(bool),
     ReturnValue(Box<Object>),
     ErrorObj(String),
@@ -65,6 +68,7 @@ impl PartialEq for Object {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Object::Integer(a), Object::Integer(b)) => a == b,
+            (Object::Float(a), Object::Float(b)) => a == b,
             (Object::Boolean(a), Object::Boolean(b)) => a == b,
             (Object::ReturnValue(a), Object::ReturnValue(b)) => a == b,
             (Object::ErrorObj(a), Object::ErrorObj(b)) => a == b,
@@ -84,6 +88,7 @@ impl Object {
     pub fn object_type(&self) -> ObjectType {
         match self {
             Object::Integer(_) => ObjectType::Integer,
+            Object::Float(_) => ObjectType::Float,
             Object::Boolean(_) => ObjectType::Boolean,
             Object::Null => ObjectType::Null,
             Object::ReturnValue(_) => ObjectType::ReturnValue,
@@ -101,6 +106,10 @@ impl Object {
             Object::Integer(i) => Some(HashKey {
                 object_type: ObjectType::Integer,
                 value: *i as u64,
+            }),
+            Object::Float(f) => Some(HashKey {
+                object_type: ObjectType::Float,
+                value: f.to_bits(),
             }),
             Object::Boolean(b) => Some(HashKey {
                 object_type: ObjectType::Boolean,
@@ -123,6 +132,7 @@ impl Object {
     pub fn inspect(&self) -> String {
         match self {
             Object::Integer(i) => i.to_string(),
+            Object::Float(f) => f.to_string(),
             Object::Boolean(b) => b.to_string(),
             Object::Null => "null".to_string(),
             Object::ReturnValue(o) => o.to_string(),

@@ -6,6 +6,7 @@ use crate::token::Token;
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
+    FloatLiteral(FloatLiteral),
     PrefixExpression(PrefixExpression),
     InfixExpression(InfixExpression),
     Boolean(Boolean),
@@ -24,6 +25,7 @@ impl Expression {
         match self {
             Expression::Identifier(i) => i.token_literal(),
             Expression::IntegerLiteral(il) => il.token_literal(),
+            Expression::FloatLiteral(fl) => fl.token_literal(),
             Expression::PrefixExpression(pe) => pe.token_literal(),
             Expression::InfixExpression(ie) => ie.token_literal(),
             Expression::Boolean(be) => be.token_literal(),
@@ -44,6 +46,7 @@ impl std::fmt::Display for Expression {
         match self {
             Expression::Identifier(i) => write!(f, "{}", i),
             Expression::IntegerLiteral(il) => write!(f, "{}", il),
+            Expression::FloatLiteral(fl) => write!(f, "{}", fl),
             Expression::PrefixExpression(pe) => write!(f, "{}", pe),
             Expression::InfixExpression(ie) => write!(f, "{}", ie),
             Expression::Boolean(be) => write!(f, "{}", be),
@@ -662,5 +665,25 @@ impl ReassignStatement {
 impl std::fmt::Display for ReassignStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} = {}", self.name.value, self.value)
+    }
+}
+
+// FloatLiteral
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct FloatLiteral {
+    pub token: Token,
+    pub value: f64,
+}
+
+impl FloatLiteral {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for FloatLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
     }
 }

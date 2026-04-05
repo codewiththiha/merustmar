@@ -37,16 +37,28 @@ impl<'a> Lexer<'a> {
         val.to_string() // Converts ၅ back to "5" for the parser
     }
 
-    pub fn read_number(&mut self) -> String {
+    pub fn read_number(&mut self) -> (String, bool) {
         let start = self.position;
+        let mut is_float = false;
+
         while let Some(ch) = self.ch {
             if is_digit(ch) {
                 self.read_char();
+            } else if ch == '.' && !is_float {
+                // Check if the next character is also a digit
+                if let Some(next_ch) = self.peek_char() {
+                    if is_digit(next_ch) {
+                        is_float = true;
+                        self.read_char();
+                        continue;
+                    }
+                }
+                break;
             } else {
                 break;
             }
         }
-        self.input[start..self.position].to_string()
+        (self.input[start..self.position].to_string(), is_float)
     }
 
     pub fn read_string(&mut self) -> String {
@@ -182,10 +194,13 @@ impl<'a> Lexer<'a> {
                 return Token::new(token_type, literal);
             }
             Some(ch) if is_digit(ch) => {
-                let literal = self.read_number();
-                return Token::new(TokenType::Int, literal);
+                let (literal, is_float) = self.read_number();
+                if is_float {
+                    return Token::new(TokenType::Float, literal);
+                } else {
+                    return Token::new(TokenType::Int, literal);
+                }
             }
-
             // TODO none should not create a new token tho
             // index 0 having none can cause an error not a problem tho adding skip space can fix
             None => Token::new(TokenType::Eof, "".to_string()),

@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use crate::{
     ast::{
         ArrayLiteral, BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement,
-        FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression, InfixExpression,
-        IntegerLiteral, LetStatement, LoopExpression, MultiLetStatement, PrefixExpression, Program,
-        ReassignStatement, ReturnStatement, Statement, StringLiteral,
+        FloatLiteral, FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression,
+        InfixExpression, IntegerLiteral, LetStatement, LoopExpression, MultiLetStatement,
+        PrefixExpression, Program, ReassignStatement, ReturnStatement, Statement, StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -88,6 +88,7 @@ impl<'a> Parser<'a> {
         parser.register_prefix(TokenType::LBrace, Parser::parse_hash_literal);
         parser.register_prefix(TokenType::MyanmarInt, Parser::parse_n_times_loop);
         parser.register_prefix(TokenType::Loop, Parser::parse_while_or_inf_loop);
+        parser.register_prefix(TokenType::Float, Parser::parse_float_literal);
 
         // InfixFns
         parser.register_infix(TokenType::Plus, Parser::parse_infix_expression);
@@ -135,6 +136,21 @@ impl<'a> Parser<'a> {
                 self.parse_ident_assign_statement()
             }
             _ => self.parse_expression_statement(),
+        }
+    }
+
+    pub fn parse_float_literal(&mut self) -> Option<Expression> {
+        let value = self.cur_token.literal.parse::<f64>().ok();
+        match value {
+            Some(v) => Some(Expression::FloatLiteral(FloatLiteral {
+                token: self.cur_token.clone(),
+                value: v,
+            })),
+            None => {
+                let msg = format!("could not parse {:?} as float", self.cur_token.literal);
+                self.errors.push(msg);
+                None
+            }
         }
     }
 
