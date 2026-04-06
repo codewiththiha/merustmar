@@ -139,6 +139,221 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn parse_expression_statement(&mut self) -> Option<Statement> {
+        let token = self.cur_token.clone();
+        let expression = self.parse_expression(Precedence::Lowest);
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        Some(Statement::Expression(ExpressionStatement {
+            token,
+            expression,
+        }))
+    }
+
+    pub fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
+        // this is the part that filters out the correct function
+        let prefix_fn = self
+            .prefix_parse_fns
+            .get(&self.cur_token.token_type)
+            .copied();
+
+        if prefix_fn.is_none() {
+            self.no_prefix_parse_fn_error();
+            return None;
+        }
+        let mut left_exp = prefix_fn.unwrap()(self);
+
+        while !self.peek_token_is(TokenType::Semicolon) && precedence < self.peek_precedence() {
+            // notice in this code we used peek_token to get infix function
+            let infix_fn = self
+                .infix_parse_fns
+                .get(&self.peek_token.token_type)
+                .copied();
+            if infix_fn.is_none() {
+                return left_exp;
+            }
+            self.next_token();
+            if let Some(le) = left_exp {
+                left_exp = infix_fn.unwrap()(self, le);
+            }
+        }
+
+        left_exp
+    }
+
+    pub fn parse_grouped_expression(&mut self) -> Option<Expression> {
+        self.next_token();
+        let expresssion = self.parse_expression(Precedence::Lowest);
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+        expresssion
+    }
+
+    pub fn parse_identifier(&mut self) -> Option<Expression> {
+        Some(Expression::Identifier(Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        }))
+    }
+
+    // Prefix parser
+    pub fn parse_prefix_expression(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let operator = self.cur_token.literal.clone();
+
+        self.next_token();
+
+        let right = self
+            .parse_expression(Precedence::Prefix)
+            .map(|x| Box::new(x));
+
+        Some(Expression::PrefixExpression(PrefixExpression {
+            token,
+            operator,
+            right,
+        }))
+    }
+
+    // Infix parser
+    pub fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let operator = self.cur_token.literal.clone();
+        let left = Some(left).map(Box::new);
+        let precedence = self.cur_precedence();
+        self.next_token();
+        let right = self.parse_expression(precedence).map(Box::new);
+
+        Some(Expression::InfixExpression(InfixExpression {
+            token,
+            operator,
+            left,
+            right,
+        }))
+    }
+
+    // LetStatement parser (singluar)
+    pub fn parse_let_statement(&mut self) -> Option<Statement> {
+        let token = self.cur_token.clone();
+
+        if !self.expect_peek(TokenType::Ident) {
+            return None;
+        }
+        // don't get confused if expect_peek is correct the next_token get run
+        let name = Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        };
+
+        if !self.expect_peek(TokenType::Assign) {
+            return None;
+        }
+
+        self.next_token();
+        let value = self.parse_expression(Precedence::Lowest);
+
+        // fixed potential infinite loop
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        Some(Statement::Let(LetStatement { token, name, value }))
+    }
+
+    /// Parses `ident = expr` and then disambiguates:
+    ///   - peek is `။` (Semicolon) or EOF  →  Reassignment
+    ///   - peek is `,` or `လို့ထား` (LetSuffix)  →  Multi-let declaration
+    pub fn parse_ident_assign_statement(&mut self) -> Option<Statement> {
+        let start_token = self.cur_token.clone();
+
+        // Capture the first identifier
+        let first_name = Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        };
+
+        // Expect '='
+        if !self.expect_peek(TokenType::Assign) {
+            return None;
+        }
+
+        // Move past '=' and parse the expression
+        self.next_token();
+        let first_value = self.parse_expression(Precedence::Lowest)?;
+
+        // Disambiguate based on what follows
+        if self.peek_token_is(TokenType::Comma) || self.peek_token_is(TokenType::LetSuffix) {
+            // ── It's a multi-let declaration ──
+            let mut declarations = vec![(first_name, first_value)];
+
+            // Collect additional comma-separated pairs
+            while self.peek_token_is(TokenType::Comma) {
+                self.next_token(); // consume ','
+                if !self.expect_peek(TokenType::Ident) {
+                    return None;
+                }
+
+                let name = Identifier {
+                    token: self.cur_token.clone(),
+                    value: self.cur_token.literal.clone(),
+                };
+
+                if !self.expect_peek(TokenType::Assign) {
+                    return None;
+                }
+
+                self.next_token(); // move past '='
+                let value = self.parse_expression(Precedence::Lowest)?;
+                declarations.push((name, value));
+            }
+
+            // Expect closing 'လို့ထား'
+            if !self.expect_peek(TokenType::LetSuffix) {
+                return None;
+            }
+
+            // Optional semicolon after လို့ထား
+            if self.peek_token_is(TokenType::Semicolon) {
+                self.next_token();
+            }
+
+            Some(Statement::MultiLet(MultiLetStatement {
+                token: start_token,
+                declarations,
+            }))
+        } else {
+            // ── It's a reassignment: x = value။ ──
+            if self.peek_token_is(TokenType::Semicolon) {
+                self.next_token(); // consume ။
+            }
+
+            Some(Statement::Reassign(ReassignStatement {
+                token: start_token,
+                name: first_name,
+                value: first_value,
+            }))
+        }
+    }
+
+    // IntegerLiteral parser
+    pub fn parse_integer_literal(&mut self) -> Option<Expression> {
+        let value = self.cur_token.literal.parse::<i64>().ok();
+        match value {
+            Some(v) => Some(Expression::IntegerLiteral(IntegerLiteral {
+                token: self.cur_token.clone(),
+                value: v,
+            })),
+            None => {
+                let msg = format!("could not parse {:?} as integer", self.cur_token.literal);
+                self.errors.push(msg);
+                None
+            }
+        }
+    }
+
+    // FloatLiteral parser
     pub fn parse_float_literal(&mut self) -> Option<Expression> {
         let value = self.cur_token.literal.parse::<f64>().ok();
         match value {
@@ -154,6 +369,22 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // StringLiteral parser
+    pub fn parse_string_literal(&mut self) -> Option<Expression> {
+        Some(Expression::StringLiteral(StringLiteral {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        }))
+    }
+
+    pub fn parse_boolean(&mut self) -> Option<Expression> {
+        Some(Expression::Boolean(Boolean {
+            token: self.cur_token.clone(),
+            value: self.cur_token_is(TokenType::True),
+        }))
+    }
+
+    // parse functions in common way "fn something()"
     pub fn parse_function_declaration(&mut self) -> Option<Statement> {
         let fn_token = self.cur_token.clone(); // the ဖန်ရှင် token
 
@@ -202,324 +433,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    pub fn parse_n_times_loop(&mut self) -> Option<Expression> {
-        let token = self.cur_token.clone();
-        let count = token.literal.parse::<i64>().ok()?;
-
-        if !self.expect_peek(TokenType::TimesLoop) {
-            return None;
-        }
-        if !self.expect_peek(TokenType::LBrace) {
-            return None;
-        }
-
-        let body = self.parse_block_statement();
-
-        Some(Expression::LoopExpression(LoopExpression {
-            token,
-            count: Some(count),
-            condition: None,
-            body,
-        }))
-    }
-
-    pub fn parse_while_or_inf_loop(&mut self) -> Option<Expression> {
-        let token = self.cur_token.clone();
-        let mut condition = None;
-
-        if self.peek_token_is(TokenType::LBrace) {
-            // Infinite loop syntax: ပတ် {}
-            self.next_token();
-        } else {
-            // While loop syntax: ပတ် condition {}
-            self.next_token();
-            condition = self.parse_expression(Precedence::Lowest).map(Box::new);
-            if !self.expect_peek(TokenType::LBrace) {
-                return None;
-            }
-        }
-
-        let body = self.parse_block_statement();
-
-        Some(Expression::LoopExpression(LoopExpression {
-            token,
-            count: None,
-            condition,
-            body,
-        }))
-    }
-
-    pub fn parse_expression_statement(&mut self) -> Option<Statement> {
-        let token = self.cur_token.clone();
-        let expression = self.parse_expression(Precedence::Lowest);
-        if self.peek_token_is(TokenType::Semicolon) {
-            self.next_token();
-        }
-
-        Some(Statement::Expression(ExpressionStatement {
-            token,
-            expression,
-        }))
-    }
-
-    pub fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
-        // this is the part that filters out the correct function
-        let prefix_fn = self
-            .prefix_parse_fns
-            .get(&self.cur_token.token_type)
-            .copied();
-
-        if prefix_fn.is_none() {
-            self.no_prefix_parse_fn_error();
-            return None;
-        }
-        let mut left_exp = prefix_fn.unwrap()(self);
-
-        while !self.peek_token_is(TokenType::Semicolon) && precedence < self.peek_precedence() {
-            // notice in this code we used peek_token to get infix function
-            let infix_fn = self
-                .infix_parse_fns
-                .get(&self.peek_token.token_type)
-                .copied();
-            if infix_fn.is_none() {
-                return left_exp;
-            }
-            self.next_token();
-            if let Some(le) = left_exp {
-                left_exp = infix_fn.unwrap()(self, le);
-            }
-        }
-
-        left_exp
-    }
-
-    pub fn parse_identifier(&mut self) -> Option<Expression> {
-        Some(Expression::Identifier(Identifier {
-            token: self.cur_token.clone(),
-            value: self.cur_token.literal.clone(),
-        }))
-    }
-
-    // Prefix parser
-    pub fn parse_prefix_expression(&mut self) -> Option<Expression> {
-        let token = self.cur_token.clone();
-        let operator = self.cur_token.literal.clone();
-
-        self.next_token();
-
-        let right = self
-            .parse_expression(Precedence::Prefix)
-            .map(|x| Box::new(x));
-
-        Some(Expression::PrefixExpression(PrefixExpression {
-            token,
-            operator,
-            right,
-        }))
-    }
-
-    // Infix parser
-    pub fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
-        let token = self.cur_token.clone();
-        let operator = self.cur_token.literal.clone();
-        let left = Some(left).map(Box::new);
-        let precedence = self.cur_precedence();
-        self.next_token();
-        let right = self.parse_expression(precedence).map(Box::new);
-
-        Some(Expression::InfixExpression(InfixExpression {
-            token,
-            operator,
-            left,
-            right,
-        }))
-    }
-
-    // IntegerLiteral parser
-    pub fn parse_integer_literal(&mut self) -> Option<Expression> {
-        let value = self.cur_token.literal.parse::<i64>().ok();
-        match value {
-            Some(v) => Some(Expression::IntegerLiteral(IntegerLiteral {
-                token: self.cur_token.clone(),
-                value: v,
-            })),
-            None => {
-                let msg = format!("could not parse {:?} as integer", self.cur_token.literal);
-                self.errors.push(msg);
-                None
-            }
-        }
-    }
-
-    // StringLiteral parser
-    pub fn parse_string_literal(&mut self) -> Option<Expression> {
-        Some(Expression::StringLiteral(StringLiteral {
-            token: self.cur_token.clone(),
-            value: self.cur_token.literal.clone(),
-        }))
-    }
-
-    // LetStatement parser
-    pub fn parse_let_statement(&mut self) -> Option<Statement> {
-        let token = self.cur_token.clone();
-
-        if !self.expect_peek(TokenType::Ident) {
-            return None;
-        }
-        // don't get confused if expect_peek is correct the next_token get run
-        let name = Identifier {
-            token: self.cur_token.clone(),
-            value: self.cur_token.literal.clone(),
-        };
-
-        if !self.expect_peek(TokenType::Assign) {
-            return None;
-        }
-
-        self.next_token();
-        let value = self.parse_expression(Precedence::Lowest);
-
-        // fixed potential infinite loop
-        if self.peek_token_is(TokenType::Semicolon) {
-            self.next_token();
-        }
-
-        Some(Statement::Let(LetStatement { token, name, value }))
-    }
-
-    // ReturnStatement Parser
-    pub fn parse_return_statement(&mut self) -> Option<Statement> {
-        let token = self.cur_token.clone();
-        self.next_token();
-        let return_value = self.parse_expression(Precedence::Lowest);
-
-        if self.peek_token_is(TokenType::Semicolon) {
-            self.next_token();
-        }
-
-        return Some(Statement::Return(ReturnStatement {
-            token,
-            return_value,
-        }));
-    }
-
-    pub fn parse_boolean(&mut self) -> Option<Expression> {
-        Some(Expression::Boolean(Boolean {
-            token: self.cur_token.clone(),
-            value: self.cur_token_is(TokenType::True),
-        }))
-    }
-
-    pub fn parse_grouped_expression(&mut self) -> Option<Expression> {
-        self.next_token();
-        let expresssion = self.parse_expression(Precedence::Lowest);
-        if !self.expect_peek(TokenType::RParen) {
-            return None;
-        }
-        expresssion
-    }
-    //// Get Complicated
-    // pub fn parse_if_expression(&self) -> Option<Expression> {
-    //     // capture "if" token
-    //     let cur_token = self.cur_token;
-    //     let altr = None;
-    //     let cond_expr = ;
-    //
-    //     if !self.expect_peek(TokenType::LParen) {
-    //         return None;
-    //     }
-    //
-    //     self.next_token();
-    //     if let Some(e) = self.parse_expression(Precedence::Lowest) {
-    //         cond_expr = Box::new(Some(e));
-    //     }
-    //
-    //     if !self.expect_peek(TokenType::RParen) {
-    //         return None;
-    //     }
-    //
-    //     let cons_expr = self.parse_block_statement();
-    //
-    //     if self.peek_token_is(TokenType::Else) {
-    //         self.next_token();
-    //
-    //         if !self.expect_peek(TokenType::LBrace) {
-    //             return None;
-    //         }
-    //
-    //         altr = self.parse_block_statement();
-    //     }
-    //
-    //     Some(Expression::IfExpression(IfExpression {
-    //         token: cur_token,
-    //         condition: cond_expr,
-    //         consequence: cons_expr,
-    //         alternative: altr,
-    //     }))
-    // }
-
-    pub fn parse_if_expression(&mut self) -> Option<Expression> {
-        let token = self.cur_token.clone();
-
-        if !self.expect_peek(TokenType::LParen) {
-            return None;
-        }
-
-        self.next_token();
-
-        // We use the `?` operator to safely extract the expression,
-        // or return None early if it fails to parse.
-        let condition = self.parse_expression(Precedence::Lowest);
-
-        if !self.expect_peek(TokenType::RParen) {
-            return None;
-        }
-
-        if !self.expect_peek(TokenType::LBrace) {
-            return None;
-        }
-
-        let consequence = self.parse_block_statement();
-
-        let mut alternative = None;
-
-        if self.peek_token_is(TokenType::Else) {
-            self.next_token();
-
-            if !self.expect_peek(TokenType::LBrace) {
-                return None;
-            }
-
-            alternative = self.parse_block_statement();
-        }
-
-        Some(Expression::IfExpression(IfExpression {
-            token,
-            condition: condition.map(Box::new), // Box it here, not up top!
-            consequence,
-            alternative,
-        }))
-    }
-
-    pub fn parse_block_statement(&mut self) -> Option<BlockStatement> {
-        // capture { lbrace
-        let cur_token = self.cur_token.clone();
-        let mut statements = Vec::new();
-        self.next_token();
-
-        while !self.cur_token_is(TokenType::RBrace) && !self.peek_token_is(TokenType::Eof) {
-            if let Some(s) = self.parse_statement() {
-                statements.push(s);
-            }
-            self.next_token();
-        }
-        let pack_s = Some(statements);
-        Some(BlockStatement {
-            token: cur_token,
-            statements: pack_s,
-        })
-    }
-
+    // FunctionLiteral parser ("let x = fn()" pattern)
     pub fn parse_function_literal(&mut self) -> Option<Expression> {
         let token = self.cur_token.clone();
         if !self.expect_peek(TokenType::LParen) {
@@ -609,6 +523,85 @@ impl<'a> Parser<'a> {
         Some(args)
     }
 
+    // ReturnStatement Parser
+    pub fn parse_return_statement(&mut self) -> Option<Statement> {
+        let token = self.cur_token.clone();
+        self.next_token();
+        let return_value = self.parse_expression(Precedence::Lowest);
+
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        return Some(Statement::Return(ReturnStatement {
+            token,
+            return_value,
+        }));
+    }
+
+    // conditions parser
+    pub fn parse_if_expression(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+
+        if !self.expect_peek(TokenType::LParen) {
+            return None;
+        }
+
+        self.next_token();
+
+        // We use the `?` operator to safely extract the expression,
+        // or return None early if it fails to parse.
+        let condition = self.parse_expression(Precedence::Lowest);
+
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
+
+        let consequence = self.parse_block_statement();
+
+        let mut alternative = None;
+
+        if self.peek_token_is(TokenType::Else) {
+            self.next_token();
+
+            if !self.expect_peek(TokenType::LBrace) {
+                return None;
+            }
+
+            alternative = self.parse_block_statement();
+        }
+
+        Some(Expression::IfExpression(IfExpression {
+            token,
+            condition: condition.map(Box::new), // Box it here, not up top!
+            consequence,
+            alternative,
+        }))
+    }
+
+    pub fn parse_block_statement(&mut self) -> Option<BlockStatement> {
+        // capture { lbrace
+        let cur_token = self.cur_token.clone();
+        let mut statements = Vec::new();
+        self.next_token();
+
+        while !self.cur_token_is(TokenType::RBrace) && !self.peek_token_is(TokenType::Eof) {
+            if let Some(s) = self.parse_statement() {
+                statements.push(s);
+            }
+            self.next_token();
+        }
+        let pack_s = Some(statements);
+        Some(BlockStatement {
+            token: cur_token,
+            statements: pack_s,
+        })
+    }
+
     //Parse ArrayLiteral
     // Parse array literal: [1, 2, 3]
     pub fn parse_array_literal(&mut self) -> Option<Expression> {
@@ -668,79 +661,52 @@ impl<'a> Parser<'a> {
         Some(Expression::HashLiteral(HashLiteral { token, pairs }))
     }
 
-    /// Parses `ident = expr` and then disambiguates:
-    ///   - peek is `။` (Semicolon) or EOF  →  Reassignment
-    ///   - peek is `,` or `လို့ထား` (LetSuffix)  →  Multi-let declaration
-    pub fn parse_ident_assign_statement(&mut self) -> Option<Statement> {
-        let start_token = self.cur_token.clone();
+    // loops parser
+    pub fn parse_n_times_loop(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let count = token.literal.parse::<i64>().ok()?;
 
-        // Capture the first identifier
-        let first_name = Identifier {
-            token: self.cur_token.clone(),
-            value: self.cur_token.literal.clone(),
-        };
-
-        // Expect '='
-        if !self.expect_peek(TokenType::Assign) {
+        if !self.expect_peek(TokenType::TimesLoop) {
+            return None;
+        }
+        if !self.expect_peek(TokenType::LBrace) {
             return None;
         }
 
-        // Move past '=' and parse the expression
-        self.next_token();
-        let first_value = self.parse_expression(Precedence::Lowest)?;
+        let body = self.parse_block_statement();
 
-        // Disambiguate based on what follows
-        if self.peek_token_is(TokenType::Comma) || self.peek_token_is(TokenType::LetSuffix) {
-            // ── It's a multi-let declaration ──
-            let mut declarations = vec![(first_name, first_value)];
+        Some(Expression::LoopExpression(LoopExpression {
+            token,
+            count: Some(count),
+            condition: None,
+            body,
+        }))
+    }
 
-            // Collect additional comma-separated pairs
-            while self.peek_token_is(TokenType::Comma) {
-                self.next_token(); // consume ','
-                if !self.expect_peek(TokenType::Ident) {
-                    return None;
-                }
+    pub fn parse_while_or_inf_loop(&mut self) -> Option<Expression> {
+        let token = self.cur_token.clone();
+        let mut condition = None;
 
-                let name = Identifier {
-                    token: self.cur_token.clone(),
-                    value: self.cur_token.literal.clone(),
-                };
-
-                if !self.expect_peek(TokenType::Assign) {
-                    return None;
-                }
-
-                self.next_token(); // move past '='
-                let value = self.parse_expression(Precedence::Lowest)?;
-                declarations.push((name, value));
-            }
-
-            // Expect closing 'လို့ထား'
-            if !self.expect_peek(TokenType::LetSuffix) {
+        if self.peek_token_is(TokenType::LBrace) {
+            // Infinite loop syntax: ပတ် {}
+            self.next_token();
+        } else {
+            // While loop syntax: ပတ် condition {}
+            self.next_token();
+            condition = self.parse_expression(Precedence::Lowest).map(Box::new);
+            if !self.expect_peek(TokenType::LBrace) {
                 return None;
             }
-
-            // Optional semicolon after လို့ထား
-            if self.peek_token_is(TokenType::Semicolon) {
-                self.next_token();
-            }
-
-            Some(Statement::MultiLet(MultiLetStatement {
-                token: start_token,
-                declarations,
-            }))
-        } else {
-            // ── It's a reassignment: x = value။ ──
-            if self.peek_token_is(TokenType::Semicolon) {
-                self.next_token(); // consume ။
-            }
-
-            Some(Statement::Reassign(ReassignStatement {
-                token: start_token,
-                name: first_name,
-                value: first_value,
-            }))
         }
+
+        let body = self.parse_block_statement();
+
+        Some(Expression::LoopExpression(LoopExpression {
+            token,
+            count: None,
+            condition,
+            body,
+        }))
     }
 
     // Helpers
