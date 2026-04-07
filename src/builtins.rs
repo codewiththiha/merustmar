@@ -29,6 +29,7 @@ pub fn get_builtin(name: &str) -> Option<Object> {
         // ── utilities ───────────────────────
         "sleep" => Some(Object::Builtin(builtin_sleep)),
         "rand" => Some(Object::Builtin(builtin_rand)),
+        "now_ms" => Some(Object::Builtin(builtin_now_ms)),
         _ => None,
     }
 }
@@ -319,4 +320,16 @@ fn check_arg_count(expected: usize, args: &[Object]) -> Option<Object> {
     } else {
         None
     }
+}
+
+use std::time::{SystemTime, UNIX_EPOCH};
+fn builtin_now_ms(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(0, &args) {
+        return err;
+    }
+    let ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    Object::Integer(ms)
 }
