@@ -1,6 +1,6 @@
-use std::{thread, time::Duration};
-
 use rand::Rng;
+use std::io::{self, Write};
+use std::{thread, time::Duration};
 
 use crate::{object::Object, terminal};
 
@@ -30,6 +30,14 @@ pub fn get_builtin(name: &str) -> Option<Object> {
         "sleep" => Some(Object::Builtin(builtin_sleep)),
         "rand" => Some(Object::Builtin(builtin_rand)),
         "now_ms" => Some(Object::Builtin(builtin_now_ms)),
+
+        // ── input and type casting ─────────────────
+        "input" => Some(Object::Builtin(builtin_input)),
+        "is_string" => Some(Object::Builtin(builtin_is_string)),
+        "is_int" => Some(Object::Builtin(builtin_is_int)),
+        "is_double" => Some(Object::Builtin(builtin_is_double)),
+        "to_integer" => Some(Object::Builtin(builtin_to_integer)),
+        "to_double" => Some(Object::Builtin(builtin_to_double)),
         _ => None,
     }
 }
@@ -332,4 +340,97 @@ fn builtin_now_ms(args: Vec<Object>) -> Object {
         .unwrap()
         .as_millis() as i64;
     Object::Integer(ms)
+}
+
+fn builtin_input(args: Vec<Object>) -> Object {
+    if args.len() > 1 {
+        return Object::ErrorObj(format!(
+            "wrong number of arguments. got={}, want=0 or 1",
+            args.len()
+        ));
+    }
+
+    // If a prompt string is provided, print it and flush stdout
+    if args.len() == 1 {
+        if let Object::String(prompt) = &args[0] {
+            print!("{}", prompt);
+            io::stdout().flush().unwrap_or(());
+        } else {
+            return Object::ErrorObj(format!(
+                "argument to `input` must be STRING, got {}",
+                args[0].object_type()
+            ));
+        }
+    }
+
+    let mut input = String::new();
+    match io::stdin().read_line(&mut input) {
+        Ok(_) => Object::String(input.trim_end().to_string()), // remove trailing newline
+        Err(e) => Object::ErrorObj(format!("failed to read input: {}", e)),
+    }
+}
+
+fn builtin_is_string(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    match &args[0] {
+        Object::String(_) => Object::Boolean(true),
+        _ => Object::Boolean(false),
+    }
+}
+
+fn builtin_is_int(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    match &args[0] {
+        Object::Integer(_) => Object::Boolean(true),
+        Object::String(s) => Object::Boolean(s.trim().parse::<i64>().is_ok()),
+        _ => Object::Boolean(false),
+    }
+}
+
+fn builtin_is_double(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    match &args[0] {
+        Object::Float(_) => Object::Boolean(true),
+        Object::String(s) => Object::Boolean(s.trim().parse::<f64>().is_ok()),
+        _ => Object::Boolean(false),
+    }
+}
+
+fn builtin_to_integer(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    match &args[0] {
+        Object::Integer(i) => Object::Integer(*i),
+        Object::Float(f) => Object::Integer(*f as i64),
+        Object::String(s) => match s.trim().parse::<i64>() {
+            Ok(i) => Object::Integer(i),
+            Err(_) => Object::ErrorObj(format!("could not parse '{}' as integer", s)),
+        },
+        _ => Object::ErrorObj(format!("cannot cast {} to integer", args[0].object_type())),
+    }
+}
+
+fn builtin_to_double(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    match &args[0] {
+        Object::Float(f) => Object::Float(*f),
+        Object::Integer(i) => Object::Float(*i as f64),
+        Object::String(s) => match s.trim().parse::<f64>() {
+            Ok(f) => Object::Float(f),
+            Err(_) => Object::ErrorObj(format!("could not parse '{}' as double/float", s)),
+        },
+        _ => Object::ErrorObj(format!(
+            "cannot cast {} to double/float",
+            args[0].object_type()
+        )),
+    }
 }
