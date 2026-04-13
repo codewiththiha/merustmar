@@ -1,3 +1,4 @@
+
 # Merustmar
 
 A Myanmar (Burmese) scripting language interpreter written in Rust.
@@ -13,21 +14,23 @@ The project is a learning exercise inspired by *Writing an Interpreter in Go* (T
 ## Features
 
 ### Core Language
-- **Variable Bindings**: Single declarations (`ထား`) and multi-variable declarations (`လို့ထား`).
+- **Variable Bindings**: Single declarations (`ထား`), multi-variable declarations (`လို့ထား`), and reassignment (`x = value`).
 - **Data Types**: Integers, Floats, Booleans, Strings, Arrays, and Hashes (Key-Value pairs).
+- **Myanmar Digits**: Native support for Myanmar numerals (`၀`–`၉`) as integer literals (e.g. `၅ ခါပတ် { ... }`).
 - **Arithmetic and Logic**: 
     - Operators: `+`, `-`, `*`, `/`, `%`
     - Comparisons: `==`, `!=`, `<`, `>`
     - Boolean Logic: `!`, `&&`, `||`
+- **String Operations**: Concatenation (`+`), equality (`==`/`!=`), and escape sequences (`\n`, `\t`, `\\`, `\"`).
 - **Control Flow**: 
     - Conditionals: `တကယ်လို့` (if) and `မဟုတ်ရင်` (else).
-    - Functions: First-class functions defined with `ဖန်ရှင်` (fn).
+    - Functions: First-class functions defined with `ဖန်ရှင်` (fn), supporting closures.
     - Return values: `ဒါယူ` (return).
 - **Looping Constructs**:
     - Infinite Loops: `ပတ် { ... }`
     - While-style Loops: `ပတ် condition { ... }`
-    - Fixed-iteration Loops: `N ခါပတ် { ... }`
-- **Collections**: Array indexing (`array[index]`) and Hash literals (`{"key": value}`).
+    - Fixed-iteration Loops: `N ခါပတ် { ... }` (accepts both Arabic and Myanmar digits)
+- **Collections**: Array indexing (`array[index]`), Hash literals (`{"key": value}`), and Hash access (`hash["key"]`).
 
 ### Terminal User Interface (TUI)
 Merustmar integrates with `crossterm` to allow the creation of terminal-based applications.
@@ -55,23 +58,33 @@ Merustmar integrates with `crossterm` to allow the creation of terminal-based ap
 ## Built-in Functions
 
 ### General Utilities
-- `ရေး(val)`: Prints values to the console.
+- `ရေး(val, ...)`: Prints values to the console. Accepts multiple arguments.
 - `len(obj)`: Returns length of strings or arrays.
 - `first(arr)`, `last(arr)`, `rest(arr)`: Array element access and slicing.
 - `push(arr, val)`: Appends an element to an array.
-- `sleep(ms)`: Pauses execution.
-- `rand(min, max)`: Generates a random integer.
+- `sleep(ms)`: Pauses execution for the given milliseconds.
+- `rand(min, max)`: Generates a random integer (inclusive on both ends).
+- `now_ms()`: Returns the current Unix timestamp in milliseconds.
+
+### Input and Type Checking
+- `input(prompt?)`: Reads a line of input from stdin. Optionally accepts a prompt string.
+- `is_string(val)`: Returns `true` if the value is a string.
+- `is_int(val)`: Returns `true` if the value is an integer or a string parseable as an integer.
+- `is_double(val)`: Returns `true` if the value is a float or a string parseable as a float.
+- `to_integer(val)`: Converts an integer, float, or numeric string to an integer.
+- `to_double(val)`: Converts a float, integer, or numeric string to a float.
 
 ### Terminal Control
 - `terminal_init()`: Initializes raw mode and the alternate screen.
 - `terminal_end()`: Cleans up and restores the terminal.
 - `clear()`: Clears the terminal screen.
-- `terminal_size()`: Returns the current terminal width and height.
+- `terminal_size()`: Returns the current terminal width and height as `[width, height]`.
 - `print_at(x, y, text)`: Prints text at a specific location.
 - `print_at_center(x, y, cols, rows, text)`: Centers text within a specified box.
 - `draw_border(cols, rows)`: Draws a centered border.
-- `read_key()`: Blocks until a key is pressed.
-- `poll_key(timeout)`: Checks for key input without blocking indefinitely.
+- `flush()`: Flushes the terminal output buffer.
+- `read_key()`: Blocks until a key is pressed, returns the key as a string.
+- `poll_key(timeout_ms)`: Checks for key input without blocking indefinitely. Returns `null` on timeout.
 
 ## Building
 
@@ -135,3 +148,4 @@ This project is licensed under the **MIT License**.
 
 - Inspired by the Monkey programming language and the book *Writing an Interpreter in Go* by Thorsten Ball.
 - Implemented using Rust's ownership model, pattern matching, and algebraic data types.
+
