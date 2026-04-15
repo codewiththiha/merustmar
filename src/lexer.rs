@@ -214,12 +214,59 @@ impl<'a> Lexer<'a> {
         token
     }
 
+    // also the comment out logic's in this fn
     fn skip_whitespace(&mut self) {
-        while let Some(ch) = self.ch {
-            if !ch.is_whitespace() {
-                break;
+        loop {
+            // normal spaces, tabs, newlines
+            while let Some(ch) = self.ch {
+                if ch.is_whitespace() {
+                    self.read_char();
+                } else {
+                    break;
+                }
             }
-            self.read_char();
+
+            // // line comment
+            if self.ch == Some('/') && self.peek_char() == Some('/') {
+                self.read_char();
+                self.read_char();
+                while let Some(ch) = self.ch {
+                    if ch == '\n' {
+                        break;
+                    }
+                    self.read_char();
+                }
+                continue;
+            }
+
+            // /* block comment */
+            if self.ch == Some('/') && self.peek_char() == Some('*') {
+                self.read_char();
+                self.read_char();
+                while let Some(_) = self.ch {
+                    if self.ch == Some('*') && self.peek_char() == Some('/') {
+                        self.read_char();
+                        self.read_char();
+                        break;
+                    }
+                    self.read_char();
+                }
+                continue;
+            }
+
+            // # hash comment
+            if self.ch == Some('#') {
+                self.read_char();
+                while let Some(ch) = self.ch {
+                    if ch == '\n' {
+                        break;
+                    }
+                    self.read_char();
+                }
+                continue;
+            }
+
+            break;
         }
     }
 }
