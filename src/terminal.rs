@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::{
     ExecutableCommand,
     cursor::{Hide, MoveTo, Show},
@@ -5,14 +6,67 @@ use crossterm::{
     style::Print,
     terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
+#[cfg(not(target_arch = "wasm32"))]
 use std::io::{Write, stdout};
+
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
+#[cfg(not(target_arch = "wasm32"))]
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+// --- WASM MOCKS ---
+#[cfg(target_arch = "wasm32")]
+pub fn init() -> Result<(), String> {
+    Ok(())
+}
+#[cfg(target_arch = "wasm32")]
+pub fn cleanup() {}
+#[cfg(target_arch = "wasm32")]
+pub fn clear_screen() -> Result<(), String> {
+    Ok(())
+}
+#[cfg(target_arch = "wasm32")]
+pub fn flush() -> Result<(), String> {
+    Ok(())
+}
+#[cfg(target_arch = "wasm32")]
+pub fn size() -> Result<(u16, u16), String> {
+    Ok((80, 24))
+}
+#[cfg(target_arch = "wasm32")]
+pub fn print_at(_x: u16, _y: u16, _text: &str) -> Result<(), String> {
+    Ok(())
+}
+#[cfg(target_arch = "wasm32")]
+pub fn print_at_center(
+    _x: u16,
+    _y: u16,
+    _cols: u16,
+    _rows: u16,
+    _text: &str,
+) -> Result<(), String> {
+    Ok(())
+}
+#[cfg(target_arch = "wasm32")]
+pub fn poll_key(_timeout_ms: u64) -> Result<Option<String>, String> {
+    Ok(None)
+}
+#[cfg(target_arch = "wasm32")]
+pub fn read_key_blocking() -> Result<String, String> {
+    Err("Not supported in browser".into())
+}
+#[cfg(target_arch = "wasm32")]
+pub fn draw_border(_cols: u16, _rows: u16) -> Result<(), String> {
+    Ok(())
+}
 
 // lifecycle
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn init() -> Result<(), String> {
     if INITIALIZED.load(Ordering::SeqCst) {
         return Err("terminal already initialized".into());
@@ -27,6 +81,7 @@ pub fn init() -> Result<(), String> {
 }
 
 /// Restores the terminal. Safe to call multiple times / when not initialized.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn cleanup() {
     if !INITIALIZED.swap(false, Ordering::SeqCst) {
         return; // was not initialized
@@ -38,6 +93,7 @@ pub fn cleanup() {
 }
 
 // primitives
+#[cfg(not(target_arch = "wasm32"))]
 pub fn clear_screen() -> Result<(), String> {
     stdout()
         .execute(Clear(ClearType::All))
@@ -45,14 +101,17 @@ pub fn clear_screen() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn flush() -> Result<(), String> {
     stdout().flush().map_err(|e| e.to_string())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn size() -> Result<(u16, u16), String> {
     terminal::size().map_err(|e| e.to_string())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn print_at(x: u16, y: u16, text: &str) -> Result<(), String> {
     let mut out = stdout();
     out.execute(MoveTo(x, y)).map_err(|e| e.to_string())?;
@@ -61,6 +120,7 @@ pub fn print_at(x: u16, y: u16, text: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn print_at_center(
     x: u16,
     y: u16,
@@ -75,6 +135,7 @@ pub fn print_at_center(
 }
 
 //  input
+#[cfg(not(target_arch = "wasm32"))]
 pub fn poll_key(timeout_ms: u64) -> Result<Option<String>, String> {
     if event::poll(Duration::from_millis(timeout_ms)).map_err(|e| e.to_string())? {
         if let Event::Key(KeyEvent {
@@ -89,6 +150,7 @@ pub fn poll_key(timeout_ms: u64) -> Result<Option<String>, String> {
     Ok(None)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn read_key_blocking() -> Result<String, String> {
     loop {
         if let Event::Key(KeyEvent {
@@ -102,6 +164,7 @@ pub fn read_key_blocking() -> Result<String, String> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn keycode_str(code: KeyCode) -> String {
     match code {
         KeyCode::Up => "up".into(),
@@ -118,6 +181,7 @@ fn keycode_str(code: KeyCode) -> String {
 }
 
 // draw_border (centred)
+#[cfg(not(target_arch = "wasm32"))]
 pub fn draw_border(cols: u16, rows: u16) -> Result<(), String> {
     let (sw, sh) = size()?;
     let sx = sw.saturating_sub(cols) / 2;

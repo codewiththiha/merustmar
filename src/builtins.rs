@@ -1,8 +1,14 @@
+#[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
+
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    pub static OUTPUT_BUFFER: RefCell<String> = RefCell::new(String::new());
+}
+use crate::{object::Object, terminal};
 use rand::Rng;
 use std::io::{self, Write};
 use std::{thread, time::Duration};
-
-use crate::{object::Object, terminal};
 
 pub fn get_builtin(name: &str) -> Option<Object> {
     match name {
@@ -120,12 +126,21 @@ fn builtin_print(args: Vec<Object>) -> Object {
     if args.is_empty() {
         return Object::ErrorObj(format!("Expected at least 1 argument got 0"));
     }
+
+    let mut output_str = String::new();
     for arg in args {
         match arg {
-            Object::String(s) => print!("{}", s),
-            _ => print!("{}", arg.inspect()),
+            Object::String(s) => output_str.push_str(&s),
+            _ => output_str.push_str(&arg.inspect()),
         }
     }
+
+    #[cfg(target_arch = "wasm32")]
+    OUTPUT_BUFFER.with(|b| b.borrow_mut().push_str(&output_str));
+
+    #[cfg(not(target_arch = "wasm32"))]
+    print!("{}", output_str);
+
     Object::String("".to_string())
 }
 
