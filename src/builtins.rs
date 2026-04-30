@@ -6,7 +6,6 @@ thread_local! {
     pub static OUTPUT_BUFFER: RefCell<String> = RefCell::new(String::new());
 }
 use crate::{object::Object, terminal};
-use rand::Rng;
 use std::io::{self, Write};
 use std::{thread, time::Duration};
 
@@ -327,7 +326,7 @@ fn builtin_rand(args: Vec<Object>) -> Object {
     if min > max {
         return Object::ErrorObj(format!("rand: min ({}) > max ({})", min, max));
     }
-    let val = rand::thread_rng().gen_range(min..=max);
+  let val = rand::random_range(min..=max);
     Object::Integer(val)
 }
 
