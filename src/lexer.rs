@@ -219,7 +219,8 @@ impl<'a> Lexer<'a> {
         loop {
             // normal spaces, tabs, newlines
             while let Some(ch) = self.ch {
-                if ch.is_whitespace() {
+                // invisible Unicode formatters
+                if ch.is_whitespace() || ch == '\u{200B}' || ch == '\u{200C}' || ch == '\u{200D}' {
                     self.read_char();
                 } else {
                     break;
