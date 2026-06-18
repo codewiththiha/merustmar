@@ -11,7 +11,7 @@ pub fn start() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut input = String::new();
-    let env = Environment::new(); //  outside the loop so state persists!
+    let env = Environment::new(); // Created outside the loop so REPL state persists across lines.
 
     loop {
         print!("{}", PROMPT);
@@ -44,6 +44,8 @@ pub fn start() {
 fn print_parser_errors(out: &mut impl Write, errors: &[String]) {
     writeln!(out, "Oops! We ran into some parser errors:").unwrap();
     for msg in errors {
+        // Each error message is already multi-line (header + source line + ^^^).
+        // Separate consecutive errors with a blank line for readability.
         writeln!(out, "{}\n", msg).unwrap();
     }
 }

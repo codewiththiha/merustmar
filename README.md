@@ -1,5 +1,8 @@
-
 # Merustmar
+
+[![CI](https://github.com/codewiththiha/merustmar/actions/workflows/ci.yml/badge.svg)](https://github.com/codewiththiha/merustmar/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)](https://www.rust-lang.org/)
 
 A Myanmar (Burmese) scripting language interpreter written in Rust.
 
@@ -7,7 +10,7 @@ A Myanmar (Burmese) scripting language interpreter written in Rust.
 
 ## Overview
 
-Merustmar is a dynamic, interpreted language that utilizes Myanmar script keywords and punctuation. It is implemented as a tree-walking interpreter, featuring a Pratt parser and a Unicode-aware lexer. The language supports standard programming constructs—such as variables, functions, and complex data types—and includes a specialized set of built-in functions for terminal manipulation (TUI).
+Merustmar is a dynamic, interpreted language that uses Myanmar script keywords and punctuation. It is implemented as a tree-walking interpreter, featuring a Pratt parser and a Unicode-aware lexer. The language supports standard programming constructs—such as variables, functions, and complex data types—and includes a specialized set of built-in functions for terminal manipulation (TUI).
 
 The project is a learning exercise inspired by *Writing an Interpreter in Go* (Thorsten Ball), adapted for the Rust ecosystem and localized for the Myanmar language.
 
@@ -16,21 +19,28 @@ The project is a learning exercise inspired by *Writing an Interpreter in Go* (T
 ### Core Language
 - **Variable Bindings**: Single declarations (`ထား`), multi-variable declarations (`လို့ထား`), and reassignment (`x = value`).
 - **Data Types**: Integers, Floats, Booleans, Strings, Arrays, and Hashes (Key-Value pairs).
-- **Myanmar Digits**: Native support for Myanmar numerals (`၀`–`၉`) as integer literals (e.g. `၅ ခါပတ် { ... }`).
-- **Arithmetic and Logic**: 
+- **Myanmar Digits**: Native support for Myanmar numerals (`၀`–`၉`) anywhere an integer literal is accepted — arithmetic, comparisons, function arguments, loop bounds, hash keys, etc. (`၅ + ၃` evaluates to `8`, just like `5 + 3`.)
+- **Arithmetic and Logic**:
     - Operators: `+`, `-`, `*`, `/`, `%`
-    - Comparisons: `==`, `!=`, `<`, `>`
+    - Comparisons: `==`, `!=`, `<`, `>`, `<=`, `>=`
     - Boolean Logic: `!`, `&&`, `||`
 - **String Operations**: Concatenation (`+`), equality (`==`/`!=`), and escape sequences (`\n`, `\t`, `\\`, `\"`).
-- **Control Flow**: 
-    - Conditionals: `တကယ်လို့` (if) and `မဟုတ်ရင်` (else).
+- **Control Flow**:
+    - Conditionals: `တကယ်လို့` (if) and `မဟုတ်ရင်` (else). *Note: `else` takes a block `{ ... }` — for else-if chains, nest the next `တကယ်လို့` inside the else block.*
     - Functions: First-class functions defined with `ဖန်ရှင်` (fn), supporting closures.
     - Return values: `ဒါယူ` (return).
 - **Looping Constructs**:
     - Infinite Loops: `ပတ် { ... }`
     - While-style Loops: `ပတ် condition { ... }`
-    - Fixed-iteration Loops: `N ခါပတ် { ... }` (accepts both Arabic and Myanmar digits)
+    - N-times Loops: `<expr> ခါပတ် { ... }` — `expr` can be any integer-valued expression (Myanmar numeral, Arabic numeral, arithmetic, function call, etc.). Example: `(n * 2) ခါပတ် { ... }`.
+    - N-times Loops with Variable: `<expr> ခါပတ် <var> { ... }` — binds `var` to the 0-based iteration index. Example: `၅ ခါပတ် i { ရေး(i) }` prints `0 1 2 3 4`.
+    - Range Loops (no var): `<start> ကနေ <end> ထိပတ် { ... }` — iterates from `start` to `end` inclusive. Example: `၇ ကနေ ၁၀ ထိပတ် { ... }` runs 4 times.
+    - Range Loops (with var): `<start> ကနေ <end> ထိပတ် <var> { ... }` — binds `var` to the current value. Example: `၇ ကနေ ၁၀ ထိပတ် i { ရေး(i) }` prints `7 8 9 10`.
+    - Array For-Each: `<arr> ကနေ <var> ထိပတ် { ... }` — iterates elements of an array (or any expression evaluating to an array, including function calls).
+    - Array For-Each with Index: `<arr> ကနေ <var>, <idx> ထိပတ် { ... }` — binds both the element and its 0-based index.
+    - Loop Control: `ရပ်။` (break — exit the enclosing loop immediately) and `ကျော်။` (continue — skip to the next iteration). Both work inside every loop form. Using either outside a loop (or inside a function body that has no enclosing loop in the same function) is a runtime error.
 - **Collections**: Array indexing (`array[index]`), Hash literals (`{"key": value}`), and Hash access (`hash["key"]`).
+- **Comments**: Line comments (`// ...` and `# ...`) and block comments (`/* ... */`).
 
 ### Terminal User Interface (TUI)
 Merustmar integrates with `crossterm` to allow the creation of terminal-based applications.
@@ -44,7 +54,7 @@ Merustmar integrates with `crossterm` to allow the creation of terminal-based ap
 | Keyword | Meaning |
 | :--- | :--- |
 | `ထား` | `let` |
-| `လို့ထား` | multi-let separator |
+| `လို့ထား` | multi-let terminator |
 | `ဖန်ရှင်` | `fn` |
 | `တကယ်လို့` | `if` |
 | `မဟုတ်ရင်` | `else` |
@@ -52,7 +62,11 @@ Merustmar integrates with `crossterm` to allow the creation of terminal-based ap
 | `မှန်` | `true` |
 | `မှား` | `false` |
 | `ပတ်` | `loop` |
-| `ခါပတ်` | times-loop marker |
+| `ခါပတ်` | times-loop marker (`<expr> ခါပတ် [var] { }`) |
+| `ကနေ` | "from" marker for range / for-each loops |
+| `ထိပတ်` | "until" loop marker (`<start> ကနေ <end> ထိပတ် [var] { }`) |
+| `ရပ်` | `break` (exit enclosing loop) |
+| `ကျော်` | `continue` (skip to next loop iteration) |
 | `ရေး` | `print` (built-in) |
 
 ## Built-in Functions
@@ -61,10 +75,11 @@ Merustmar integrates with `crossterm` to allow the creation of terminal-based ap
 - `ရေး(val, ...)`: Prints values to the console. Accepts multiple arguments.
 - `len(obj)`: Returns length of strings or arrays.
 - `first(arr)`, `last(arr)`, `rest(arr)`: Array element access and slicing.
-- `push(arr, val)`: Appends an element to an array.
+- `push(arr, val)`: Appends an element to an array (returns a new array).
 - `sleep(ms)`: Pauses execution for the given milliseconds.
 - `rand(min, max)`: Generates a random integer (inclusive on both ends).
 - `now_ms()`: Returns the current Unix timestamp in milliseconds.
+- `contains(haystack, needle)`: Substring test for strings, membership test for arrays.
 
 ### Input and Type Checking
 - `input(prompt?)`: Reads a line of input from stdin. Optionally accepts a prompt string.
@@ -73,6 +88,13 @@ Merustmar integrates with `crossterm` to allow the creation of terminal-based ap
 - `is_double(val)`: Returns `true` if the value is a float or a string parseable as a float.
 - `to_integer(val)`: Converts an integer, float, or numeric string to an integer.
 - `to_double(val)`: Converts a float, integer, or numeric string to a float.
+- `to_string(val)`: Converts any value to its string representation.
+
+### String Utilities
+- `upper(s)`: ASCII-uppercase of a string.
+- `lower(s)`: ASCII-lowercase of a string.
+- `split(s, sep)`: Splits `s` by `sep` into an array of strings. `split(s)` (one arg) splits on whitespace. `split(s, "")` splits into individual characters.
+- `join(arr, sep)`: Joins an array of values into a single string with separator.
 
 ### Terminal Control
 - `terminal_init()`: Initializes raw mode and the alternate screen.
@@ -122,6 +144,14 @@ Execute a source file with the `.mrm` extension:
 cargo run -- --run examples/hello.mrm
 ```
 
+### CLI Flags
+```text
+merustmar --input              Start the interactive REPL
+merustmar --run <file.mrm>     Run a Merustmar source file
+merustmar --help, -h           Show help
+merustmar --version, -V        Print version
+
+
 ## Project Structure
 
 ```
@@ -136,16 +166,17 @@ src/
 ├── parser.rs        # Pratt parser implementation
 ├── repl.rs          # Interactive shell logic
 ├── runner.rs        # Script file execution logic
+├── terminal.rs      # Low-level TUI wrappers (crossterm)
 ├── token.rs         # Token definitions and keyword mapping
-└── terminal.rs      # Low-level TUI wrappers (crossterm)
+└── tests/           # Inline test modules
+```
 ```
 
 ## License
 
-This project is licensed under the **MIT License**.
+This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
 
 ## Acknowledgements
 
 - Inspired by the Monkey programming language and the book *Writing an Interpreter in Go* by Thorsten Ball.
 - Implemented using Rust's ownership model, pattern matching, and algebraic data types.
-

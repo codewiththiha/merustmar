@@ -62,11 +62,48 @@ impl std::fmt::Display for Expression {
     }
 }
 // Loop Expression
+//
+// Loop forms:
+//   Times(count)         — `<expr> ခါပတ် { }`     repeat count times
+//   While(cond)           — `ပတ် cond { }`          while cond is truthy
+//   Infinite              — `ပတ် { }`                loop forever (until return)
+//   ForEach { source, var }                       — `arr ကနေ item ထိပတ် { }`
+//   ForEachIndex { source, var, index }           — `arr ကနေ item, idx ထိပတ် { }`
+//   Range { start, end }                          — `start ကနေ end ထိပတ် { }`
+//   RangeVar { start, end, var }                  — `start ကနေ end ထိပတ် i { }`
+#[derive(PartialEq, Debug, Clone)]
+pub enum LoopKind {
+    Times {
+        count: Box<Expression>,
+        // Optional loop variable bound to the 0-based iteration index.
+        var: Option<Identifier>,
+    },
+    While(Box<Expression>),
+    Infinite,
+    ForEach {
+        source: Box<Expression>,
+        var: Identifier,
+    },
+    ForEachIndex {
+        source: Box<Expression>,
+        var: Identifier,
+        index: Identifier,
+    },
+    Range {
+        start: Box<Expression>,
+        end: Box<Expression>,
+    },
+    RangeVar {
+        start: Box<Expression>,
+        end: Box<Expression>,
+        var: Identifier,
+    },
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct LoopExpression {
-    pub token: Token, // Either MyanmarInt ('5') or Loop ('ပတ်')
-    pub count: Option<i64>,
-    pub condition: Option<Box<Expression>>,
+    pub token: Token,
+    pub kind: LoopKind,
     pub body: Option<BlockStatement>,
 }
 
@@ -78,12 +115,26 @@ impl LoopExpression {
 
 impl std::fmt::Display for LoopExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(c) = self.count {
-            write!(f, "{} ခါပတ် ", c)?;
-        } else {
-            write!(f, "ပတ် ")?;
-            if let Some(ref cond) = self.condition {
-                write!(f, "{} ", cond)?;
+        match &self.kind {
+            LoopKind::Times { count, var } => match var {
+                Some(v) => write!(f, "{} ခါပတ် {} ", count, v.value)?,
+                None => write!(f, "{} ခါပတ် ", count)?,
+            },
+            LoopKind::While(cond) => {
+                write!(f, "ပတ် {} ", cond)?;
+            }
+            LoopKind::Infinite => write!(f, "ပတ် ")?,
+            LoopKind::ForEach { source, var } => {
+                write!(f, "{} ကနေ {} ထိပတ် ", source, var.value)?;
+            }
+            LoopKind::ForEachIndex { source, var, index } => {
+                write!(f, "{} ကနေ {}, {} ထိပတ် ", source, var.value, index.value)?;
+            }
+            LoopKind::Range { start, end } => {
+                write!(f, "{} ကနေ {} ထိပတ် ", start, end)?;
+            }
+            LoopKind::RangeVar { start, end, var } => {
+                write!(f, "{} ကနေ {} ထိပတ် {} ", start, end, var.value)?;
             }
         }
         if let Some(ref b) = self.body {
@@ -126,6 +177,8 @@ pub enum Statement {
     Expression(ExpressionStatement),
     Block(BlockStatement),
     Reassign(ReassignStatement),
+    Break(BreakStatement),
+    Continue(ContinueStatement),
 }
 
 impl Statement {
@@ -137,6 +190,8 @@ impl Statement {
             Statement::Block(bs) => bs.token_literal(),
             Statement::MultiLet(mls) => mls.token_literal(),
             Statement::Reassign(rs) => rs.token_literal(),
+            Statement::Break(bs) => bs.token_literal(),
+            Statement::Continue(cs) => cs.token_literal(),
         }
     }
 }
@@ -150,6 +205,8 @@ impl std::fmt::Display for Statement {
             Statement::Block(bs) => write!(f, "{}", bs),
             Statement::MultiLet(mls) => write!(f, "{}", mls),
             Statement::Reassign(rs) => write!(f, "{}", rs),
+            Statement::Break(bs) => write!(f, "{}", bs),
+            Statement::Continue(cs) => write!(f, "{}", cs),
         }
     }
 }
@@ -184,7 +241,7 @@ pub struct Program {
 impl Program {
     pub fn token_literal(&self) -> &str {
         if !self.statements.is_empty() {
-            return self.statements[0].token_literal();
+            self.statements[0].token_literal()
         } else {
             ""
         }
@@ -193,9 +250,7 @@ impl Program {
 
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // way cleaner than using ref
         for stmt in &self.statements {
-            // we'll see later
             write!(f, "{}", stmt)?;
         }
         Ok(())
@@ -266,26 +321,13 @@ impl PrefixExpression {
     }
 }
 
-/// This was only works if i didn't use Box
-// impl std::fmt::Display for PrefixExpression {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(
-//             f,
-//             "({}{})",
-//             self.operator,
-//             self.right.as_ref().map_or("", |r| r.token_literal())
-//         )
-//     }
-// }
-
 impl std::fmt::Display for PrefixExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "(")?;
         write!(f, "{}", self.operator)?;
 
         if let Some(ref expr) = self.right {
-            // Rust automatically "reaches into" the Box to find
-            // the Display implementation for Expression
+            // `expr` is `&Box<Expression>`; `Display` for `Box<T>` forwards to `T`.
             write!(f, "{}", expr)?;
         }
 
@@ -302,7 +344,7 @@ pub struct IntegerLiteral {
 
 impl IntegerLiteral {
     pub fn token_literal(&self) -> &str {
-        return &self.token.literal;
+        &self.token.literal
     }
 }
 
@@ -321,7 +363,7 @@ pub struct Identifier {
 
 impl Identifier {
     pub fn token_literal(&self) -> &str {
-        return &self.token.literal;
+        &self.token.literal
     }
 }
 
@@ -348,7 +390,7 @@ impl std::fmt::Display for ReturnStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut out = String::new();
 
-        out.push_str(&self.token_literal());
+        out.push_str(self.token_literal());
         out.push(' ');
         if let Some(ref value) = self.return_value {
             out.push_str(&value.to_string());
@@ -369,7 +411,7 @@ pub struct LetStatement {
 
 impl LetStatement {
     pub fn token_literal(&self) -> &str {
-        return &self.token.literal;
+        &self.token.literal
     }
 }
 
@@ -377,7 +419,7 @@ impl std::fmt::Display for LetStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut out = String::new();
 
-        out.push_str(&self.token_literal());
+        out.push_str(self.token_literal());
         out.push(' ');
         out.push_str(&self.name.value);
         out.push_str(" = ");
@@ -407,7 +449,7 @@ impl std::fmt::Display for BlockStatement {
         let mut out = String::new();
 
         if let Some(statements) = &self.statements {
-            for (_, s) in statements.iter().enumerate() {
+            for s in statements.iter() {
                 out.push_str(&s.to_string());
             }
         }
@@ -474,22 +516,14 @@ impl FunctionLiteral {
 
 impl std::fmt::Display for FunctionLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        //// This cost heap allocations multiple times
-        // let mut statements = Vec::new();
-        // for (_, s) in self.parameters.iter().enumerate() {
-        //     if let Some(i) = s {
-        //         statements.push(i.to_string());
-        //     }
-        // }
-
         write!(f, "{}", self.token_literal())?;
         write!(f, "(")?;
-        // Just to print statements
-        // This is the most optimized pattern in rust so take notes!!
+        // Print the parameter list as `a, b, c`. We pull the first element
+        // off the iterator so we can prefix the remaining ones with ", ".
+        // `params_iter` must be `mut` because `.next()` advances it.
         if let Some(params) = &self.parameters {
             let mut params_iter = params.iter();
 
-            // take notes params_iter need mut cuz .next basically modifing (moving)
             if let Some(first) = params_iter.next() {
                 write!(f, "{}", first.value)?;
                 for param in params_iter {
@@ -552,7 +586,7 @@ impl std::fmt::Display for CallExpression {
             if let Some(first) = args_iterator.next() {
                 write!(f, "{}", first)?;
             }
-            for (_, arg) in args_iterator.enumerate() {
+            for arg in args_iterator {
                 write!(f, ", {}", arg)?;
             }
         }
@@ -579,7 +613,7 @@ impl std::fmt::Display for ArrayLiteral {
         write!(f, "[")?;
         if let Some(elements) = &self.elements {
             let mut iter = elements.iter();
-            // TODO note this down
+            // Print elements as `a, b, c` by handling the first one separately.
             if let Some(first) = iter.next() {
                 write!(f, "{}", first)?;
                 for al in iter {
@@ -607,7 +641,7 @@ impl IndexExpression {
 
 impl std::fmt::Display for IndexExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // (something[]) we are creating this template
+        // Render as `(left[index])`.
         write!(f, "(")?;
         if let Some(left) = &self.left {
             write!(f, "{}", left)?;
@@ -665,6 +699,42 @@ impl ReassignStatement {
 impl std::fmt::Display for ReassignStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} = {}", self.name.value, self.value)
+    }
+}
+
+// BreakStatement — `ရပ်။` — exits the enclosing loop immediately.
+#[derive(Debug, PartialEq, Clone)]
+pub struct BreakStatement {
+    pub token: Token,
+}
+
+impl BreakStatement {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for BreakStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ရပ်။")
+    }
+}
+
+// ContinueStatement — `ကျော်။` — skips to the next iteration of the enclosing loop.
+#[derive(Debug, PartialEq, Clone)]
+pub struct ContinueStatement {
+    pub token: Token,
+}
+
+impl ContinueStatement {
+    pub fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl std::fmt::Display for ContinueStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ကျော်။")
     }
 }
 

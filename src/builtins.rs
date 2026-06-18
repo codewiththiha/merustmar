@@ -43,6 +43,12 @@ pub fn get_builtin(name: &str) -> Option<Object> {
         "is_double" => Some(Object::Builtin(builtin_is_double)),
         "to_integer" => Some(Object::Builtin(builtin_to_integer)),
         "to_double" => Some(Object::Builtin(builtin_to_double)),
+        "to_string" => Some(Object::Builtin(builtin_to_string)),
+        "upper" => Some(Object::Builtin(builtin_upper)),
+        "lower" => Some(Object::Builtin(builtin_lower)),
+        "split" => Some(Object::Builtin(builtin_split)),
+        "join" => Some(Object::Builtin(builtin_join)),
+        "contains" => Some(Object::Builtin(builtin_contains)),
         _ => None,
     }
 }
@@ -66,9 +72,6 @@ fn builtin_first(args: Vec<Object>) -> Object {
         return err;
     }
     match &args[0] {
-        //// If we want explict move!
-        //     Object::Array(a) if !a.is_empty() => a[0].clone(),  // non-empty array
-        // Object::Array(_) => Object::Null,                   // empty array
         Object::Array(a) => a.first().cloned().unwrap_or(Object::Null),
         _ => Object::ErrorObj(format!(
             "argument to `first` must be ARRAY, got {}",
@@ -123,7 +126,7 @@ fn builtin_push(args: Vec<Object>) -> Object {
 
 fn builtin_print(args: Vec<Object>) -> Object {
     if args.is_empty() {
-        return Object::ErrorObj(format!("Expected at least 1 argument got 0"));
+        return Object::ErrorObj("Expected at least 1 argument got 0".to_string());
     }
 
     let mut output_str = String::new();
@@ -326,7 +329,7 @@ fn builtin_rand(args: Vec<Object>) -> Object {
     if min > max {
         return Object::ErrorObj(format!("rand: min ({}) > max ({})", min, max));
     }
-  let val = rand::random_range(min..=max);
+    let val = rand::random_range(min..=max);
     Object::Integer(val)
 }
 
@@ -445,6 +448,133 @@ fn builtin_to_double(args: Vec<Object>) -> Object {
         _ => Object::ErrorObj(format!(
             "cannot cast {} to double/float",
             args[0].object_type()
+        )),
+    }
+}
+
+// String / collection utilities
+
+fn builtin_to_string(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    Object::String(args[0].inspect())
+}
+
+fn builtin_upper(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    match &args[0] {
+        Object::String(s) => Object::String(s.to_uppercase()),
+        _ => Object::ErrorObj(format!(
+            "upper: argument must be STRING, got {}",
+            args[0].object_type()
+        )),
+    }
+}
+
+fn builtin_lower(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(1, &args) {
+        return err;
+    }
+    match &args[0] {
+        Object::String(s) => Object::String(s.to_lowercase()),
+        _ => Object::ErrorObj(format!(
+            "lower: argument must be STRING, got {}",
+            args[0].object_type()
+        )),
+    }
+}
+
+// split(s, sep) splits `s` by `sep` into an array of strings.
+// split(s) (one argument) splits on whitespace.
+fn builtin_split(args: Vec<Object>) -> Object {
+    if args.is_empty() || args.len() > 2 {
+        return Object::ErrorObj(format!(
+            "wrong number of arguments. got={}, want=1 or 2",
+            args.len()
+        ));
+    }
+    let s = match &args[0] {
+        Object::String(s) => s.clone(),
+        _ => {
+            return Object::ErrorObj(format!(
+                "split: first argument must be STRING, got {}",
+                args[0].object_type()
+            ));
+        }
+    };
+    let parts: Vec<Object> = if args.len() == 2 {
+        let sep = match &args[1] {
+            Object::String(s) => s.clone(),
+            _ => {
+                return Object::ErrorObj(format!(
+                    "split: second argument must be STRING, got {}",
+                    args[1].object_type()
+                ));
+            }
+        };
+        if sep.is_empty() {
+            s.chars().map(|c| Object::String(c.to_string())).collect()
+        } else {
+            s.split(&sep)
+                .map(|p| Object::String(p.to_string()))
+                .collect()
+        }
+    } else {
+        s.split_whitespace()
+            .map(|p| Object::String(p.to_string()))
+            .collect()
+    };
+    Object::Array(parts)
+}
+
+// join(arr, sep) joins an array of values into a single string with separator.
+fn builtin_join(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(2, &args) {
+        return err;
+    }
+    let arr = match &args[0] {
+        Object::Array(a) => a.clone(),
+        _ => {
+            return Object::ErrorObj(format!(
+                "join: first argument must be ARRAY, got {}",
+                args[0].object_type()
+            ));
+        }
+    };
+    let sep = match &args[1] {
+        Object::String(s) => s.clone(),
+        _ => {
+            return Object::ErrorObj(format!(
+                "join: second argument must be STRING, got {}",
+                args[1].object_type()
+            ));
+        }
+    };
+    let parts: Vec<String> = arr
+        .iter()
+        .map(|o| match o {
+            Object::String(s) => s.clone(),
+            other => other.inspect(),
+        })
+        .collect();
+    Object::String(parts.join(&sep))
+}
+
+// contains(haystack, needle) checks for substring in strings or membership in arrays.
+fn builtin_contains(args: Vec<Object>) -> Object {
+    if let Some(err) = check_arg_count(2, &args) {
+        return err;
+    }
+    match (&args[0], &args[1]) {
+        (Object::String(hay), Object::String(needle)) => Object::Boolean(hay.contains(needle)),
+        (Object::Array(arr), needle) => Object::Boolean(arr.iter().any(|o| o == needle)),
+        _ => Object::ErrorObj(format!(
+            "contains: unsupported types ({}, {})",
+            args[0].object_type(),
+            args[1].object_type()
         )),
     }
 }

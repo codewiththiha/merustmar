@@ -2,10 +2,11 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        ArrayLiteral, BlockStatement, Boolean, CallExpression, Expression, ExpressionStatement,
-        FloatLiteral, FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexExpression,
-        InfixExpression, IntegerLiteral, LetStatement, LoopExpression, MultiLetStatement,
-        PrefixExpression, Program, ReassignStatement, ReturnStatement, Statement, StringLiteral,
+        ArrayLiteral, BlockStatement, Boolean, BreakStatement, CallExpression, ContinueStatement,
+        Expression, ExpressionStatement, FloatLiteral, FunctionLiteral, HashLiteral, Identifier,
+        IfExpression, IndexExpression, InfixExpression, IntegerLiteral, LetStatement,
+        LoopExpression, LoopKind, MultiLetStatement, PrefixExpression, Program, ReassignStatement,
+        ReturnStatement, Statement, StringLiteral,
     },
     lexer::Lexer,
     token::{Token, TokenType},
@@ -35,6 +36,8 @@ impl Precedence {
             TokenType::NotEq => Precedence::Equals,
             TokenType::Lt => Precedence::LessGreater,
             TokenType::Gt => Precedence::LessGreater,
+            TokenType::LtEq => Precedence::LessGreater,
+            TokenType::GtEq => Precedence::LessGreater,
             TokenType::Plus => Precedence::Sum,
             TokenType::Minus => Precedence::Sum,
             TokenType::Slash => Precedence::Product,
@@ -47,8 +50,7 @@ impl Precedence {
     }
 }
 
-// New Encounter (we can define fn types too in rust)
-
+// Rust lets us define type aliases for function signatures.
 type PrefixParseFn<'a> = fn(&mut Parser<'a>) -> Option<Expression>;
 type InfixParseFn<'a> = fn(&mut Parser<'a>, Expression) -> Option<Expression>;
 
@@ -57,6 +59,9 @@ pub struct Parser<'a> {
     pub cur_token: Token,
     pub peek_token: Token,
     errors: Vec<String>,
+    // 1-based position of `cur_token` in the token stream. Used for error
+    // messages of the form `Error at Line L, Token N: ...`.
+    token_position: usize,
     // Pass 'a into the types here
     pub prefix_parse_fns: HashMap<TokenType, PrefixParseFn<'a>>,
     infix_parse_fns: HashMap<TokenType, InfixParseFn<'a>>,
@@ -66,9 +71,10 @@ impl<'a> Parser<'a> {
     pub fn new(lexer: &'a mut Lexer<'a>) -> Self {
         let mut parser = Parser {
             lexer,
-            cur_token: Token::dummy(TokenType::Illegial, "".to_string()),
-            peek_token: Token::dummy(TokenType::Illegial, "".to_string()),
+            cur_token: Token::dummy(TokenType::Illegal, String::new()),
+            peek_token: Token::dummy(TokenType::Illegal, String::new()),
             errors: Vec::new(),
+            token_position: 0,
             prefix_parse_fns: HashMap::new(),
             infix_parse_fns: HashMap::new(),
         };
@@ -86,7 +92,6 @@ impl<'a> Parser<'a> {
         parser.register_prefix(TokenType::String, Parser::parse_string_literal);
         parser.register_prefix(TokenType::LBRACKET, Parser::parse_array_literal);
         parser.register_prefix(TokenType::LBrace, Parser::parse_hash_literal);
-        parser.register_prefix(TokenType::MyanmarInt, Parser::parse_n_times_loop);
         parser.register_prefix(TokenType::Loop, Parser::parse_while_or_inf_loop);
         parser.register_prefix(TokenType::Float, Parser::parse_float_literal);
 
@@ -99,6 +104,8 @@ impl<'a> Parser<'a> {
         parser.register_infix(TokenType::NotEq, Parser::parse_infix_expression);
         parser.register_infix(TokenType::Lt, Parser::parse_infix_expression);
         parser.register_infix(TokenType::Gt, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::LtEq, Parser::parse_infix_expression);
+        parser.register_infix(TokenType::GtEq, Parser::parse_infix_expression);
         parser.register_infix(TokenType::LParen, Parser::parse_call_expression);
         parser.register_infix(TokenType::LBRACKET, Parser::parse_index_expression);
         parser.register_infix(TokenType::And, Parser::parse_infix_expression);
@@ -131,6 +138,8 @@ impl<'a> Parser<'a> {
             TokenType::Function if self.peek_token_is(TokenType::Ident) => {
                 self.parse_function_declaration()
             }
+            TokenType::Break => self.parse_break_statement(),
+            TokenType::Continue => self.parse_continue_statement(),
             // If it's an Identifier AND the next token is '=', it is NOT a standard expression.
             TokenType::Ident if self.peek_token_is(TokenType::Assign) => {
                 self.parse_ident_assign_statement()
@@ -139,21 +148,237 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // `ရပ်။` — break out of the enclosing loop.
+    pub fn parse_break_statement(&mut self) -> Option<Statement> {
+        let token = self.cur_token.clone();
+        // Optional trailing `။` (semicolon's replacement :D ).
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+        Some(Statement::Break(BreakStatement { token }))
+    }
+
+    // `ကျော်။` — skip to the next iteration of the enclosing loop.
+    pub fn parse_continue_statement(&mut self) -> Option<Statement> {
+        let token = self.cur_token.clone();
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+        Some(Statement::Continue(ContinueStatement { token }))
+    }
+
     pub fn parse_expression_statement(&mut self) -> Option<Statement> {
         let token = self.cur_token.clone();
-        let expression = self.parse_expression(Precedence::Lowest);
+        let expression = self.parse_expression(Precedence::Lowest)?;
+
+        // After parsing the leading expression, we may be looking at one of the
+        // expression-led loop forms:
+        //   <expr> ခါပတ် { }                 — N-times loop
+        //   <arr_expr> ကနေ <var> ထိပတ် { }  — array for-each
+        //   <arr_expr> ကနေ <var>, <idx> ထိပတ် { }  — array for-each with index
+        //   <start> ကနေ <end> ထိပတ် { }    — range loop (no var)
+        //   <start> ကနေ <end> ထိပတ် <var> { } — range loop with var
+        if self.peek_token_is(TokenType::TimesLoop) {
+            return self.parse_times_loop_from_expr(token, expression);
+        }
+        if self.peek_token_is(TokenType::FromMarker) {
+            return self.parse_from_loop_from_expr(token, expression);
+        }
+
         if self.peek_token_is(TokenType::Semicolon) {
             self.next_token();
         }
 
         Some(Statement::Expression(ExpressionStatement {
             token,
-            expression,
+            expression: Some(expression),
+        }))
+    }
+
+    // Builds a `Times(count_expr)` loop once `<count_expr> ခါပတ်` has been matched.
+    // Supports an optional loop variable:
+    //   <expr> ခါပတ် { }       — no var (just iterate N times)
+    //   <expr> ခါပတ် i { }     — bind i to the 0-based iteration index
+    fn parse_times_loop_from_expr(
+        &mut self,
+        token: Token,
+        count_expr: Expression,
+    ) -> Option<Statement> {
+        // Consume `ခါပတ်`. After this, cur is `ခါပတ်` and peek is whatever
+        // follows (either an identifier for the loop var, or `{`).
+        self.next_token();
+
+        // Optional loop variable: `ခါပတ် i { }` vs `ခါပတ် { }`.
+        let var = if self.peek_token_is(TokenType::Ident) {
+            self.next_token(); // advance cur to the identifier
+            let id = Identifier {
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            };
+            Some(id)
+        } else {
+            None
+        };
+
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
+        let body = self.parse_block_statement();
+        let expr = Expression::LoopExpression(LoopExpression {
+            token,
+            kind: LoopKind::Times {
+                count: Box::new(count_expr),
+                var,
+            },
+            body,
+        });
+        Some(Statement::Expression(ExpressionStatement {
+            token: self.cur_token.clone(),
+            expression: Some(expr),
+        }))
+    }
+
+    // Builds one of the `ကနေ ... ထိပတ်` loop variants.
+    //
+    // We've already consumed `<source_expr>` (passed in as `source`). When this
+    // function is entered, `cur_token` is the source's last token and
+    // `peek_token` is `ကနေ`. Disambiguate after consuming `ကနေ`:
+    //   - Ident followed by `ထိပတ်`         -> ForEach { source, var }
+    //   - Ident followed by `,`              -> ForEachIndex { source, var, index }
+    //   - otherwise                          -> Range; parse `<end>` expression,
+    //                                            then expect `ထိပတ်`, optionally
+    //                                            followed by a loop variable.
+    fn parse_from_loop_from_expr(&mut self, token: Token, source: Expression) -> Option<Statement> {
+        // Consume `ကနေ`. After this: cur is the token that followed `ကနေ`.
+        if !self.expect_peek(TokenType::FromMarker) {
+            return None;
+        }
+        self.next_token(); // advance past `ကနေ` to the token after it
+
+        // cur is an identifier and peek is either ထိပတ် or Comma.
+        if self.cur_token_is(TokenType::Ident)
+            && (self.peek_token_is(TokenType::UntilLoop) || self.peek_token_is(TokenType::Comma))
+        {
+            let var = Identifier {
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            };
+
+            if self.peek_token_is(TokenType::Comma) {
+                // ForEachIndex: <source> ကနေ <var>, <index> ထိပတ် { }
+                self.next_token(); // consume var, now on `,`
+                self.next_token(); // consume `,`, now on next ident
+                if !self.cur_token_is(TokenType::Ident) {
+                    let msg = format!(
+                        "expected identifier for index after `,`, got {:?} ('{}')",
+                        self.cur_token.token_type, self.cur_token.literal
+                    );
+                    let token = self.cur_token.clone();
+                    let pos = self.token_position.saturating_sub(1);
+                    self.emit_error(&token, pos, &msg);
+                    return None;
+                }
+                let index = Identifier {
+                    token: self.cur_token.clone(),
+                    value: self.cur_token.literal.clone(),
+                };
+                if !self.expect_peek(TokenType::UntilLoop) {
+                    return None;
+                }
+                if !self.expect_peek(TokenType::LBrace) {
+                    return None;
+                }
+                let body = self.parse_block_statement();
+                let expr = Expression::LoopExpression(LoopExpression {
+                    token,
+                    kind: LoopKind::ForEachIndex {
+                        source: Box::new(source),
+                        var,
+                        index,
+                    },
+                    body,
+                });
+                return Some(Statement::Expression(ExpressionStatement {
+                    token: self.cur_token.clone(),
+                    expression: Some(expr),
+                }));
+            } else {
+                // ForEach: <source> ကနေ <var> ထိပတ် { }
+                if !self.expect_peek(TokenType::UntilLoop) {
+                    return None;
+                }
+                if !self.expect_peek(TokenType::LBrace) {
+                    return None;
+                }
+                let body = self.parse_block_statement();
+                let expr = Expression::LoopExpression(LoopExpression {
+                    token,
+                    kind: LoopKind::ForEach {
+                        source: Box::new(source),
+                        var,
+                    },
+                    body,
+                });
+                return Some(Statement::Expression(ExpressionStatement {
+                    token: self.cur_token.clone(),
+                    expression: Some(expr),
+                }));
+            }
+        }
+
+        // Range loop. Parse `<end>` as a full expression.
+        // cur_token is the start of the end expression.
+        let end_expr = self.parse_expression(Precedence::Lowest)?;
+        if !self.expect_peek(TokenType::UntilLoop) {
+            return None;
+        }
+
+        // Optional loop variable: `ထိပတ် i { }` vs `ထိပတ် { }`.
+        if self.peek_token_is(TokenType::Ident) {
+            self.next_token(); // consume `ထိပတ်`, now on ident
+            let var = Identifier {
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            };
+            if !self.expect_peek(TokenType::LBrace) {
+                return None;
+            }
+            let body = self.parse_block_statement();
+            let expr = Expression::LoopExpression(LoopExpression {
+                token,
+                kind: LoopKind::RangeVar {
+                    start: Box::new(source),
+                    end: Box::new(end_expr),
+                    var,
+                },
+                body,
+            });
+            return Some(Statement::Expression(ExpressionStatement {
+                token: self.cur_token.clone(),
+                expression: Some(expr),
+            }));
+        }
+
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
+        let body = self.parse_block_statement();
+        let expr = Expression::LoopExpression(LoopExpression {
+            token,
+            kind: LoopKind::Range {
+                start: Box::new(source),
+                end: Box::new(end_expr),
+            },
+            body,
+        });
+        Some(Statement::Expression(ExpressionStatement {
+            token: self.cur_token.clone(),
+            expression: Some(expr),
         }))
     }
 
     pub fn parse_expression(&mut self, precedence: Precedence) -> Option<Expression> {
-        // this is the part that filters out the correct function
+        // Look up the prefix parser for the current token.
         let prefix_fn = self
             .prefix_parse_fns
             .get(&self.cur_token.token_type)
@@ -166,7 +391,8 @@ impl<'a> Parser<'a> {
         let mut left_exp = prefix_fn.unwrap()(self);
 
         while !self.peek_token_is(TokenType::Semicolon) && precedence < self.peek_precedence() {
-            // notice in this code we used peek_token to get infix function
+            // The infix parser is looked up by the *peek* token, since the
+            // peek token is what binds `left_exp` on its right side.
             let infix_fn = self
                 .infix_parse_fns
                 .get(&self.peek_token.token_type)
@@ -206,9 +432,7 @@ impl<'a> Parser<'a> {
 
         self.next_token();
 
-        let right = self
-            .parse_expression(Precedence::Prefix)
-            .map(|x| Box::new(x));
+        let right = self.parse_expression(Precedence::Prefix).map(Box::new);
 
         Some(Expression::PrefixExpression(PrefixExpression {
             token,
@@ -221,7 +445,7 @@ impl<'a> Parser<'a> {
     pub fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
         let token = self.cur_token.clone();
         let operator = self.cur_token.literal.clone();
-        let left = Some(left).map(Box::new);
+        let left = Some(Box::new(left));
         let precedence = self.cur_precedence();
         self.next_token();
         let right = self.parse_expression(precedence).map(Box::new);
@@ -241,7 +465,7 @@ impl<'a> Parser<'a> {
         if !self.expect_peek(TokenType::Ident) {
             return None;
         }
-        // don't get confused if expect_peek is correct the next_token get run
+        // If `expect_peek` succeeded, it has already advanced to the identifier token.
         let name = Identifier {
             token: self.cur_token.clone(),
             value: self.cur_token.literal.clone(),
@@ -254,7 +478,7 @@ impl<'a> Parser<'a> {
         self.next_token();
         let value = self.parse_expression(Precedence::Lowest);
 
-        // fixed potential infinite loop
+        // Consume the optional trailing semicolon (avoids a potential infinite loop).
         if self.peek_token_is(TokenType::Semicolon) {
             self.next_token();
         }
@@ -348,7 +572,8 @@ impl<'a> Parser<'a> {
             None => {
                 let msg = format!("could not parse {:?} as integer", self.cur_token.literal);
                 let token = self.cur_token.clone();
-                self.emit_error(&token, &msg);
+                let pos = self.token_position.saturating_sub(1);
+                self.emit_error(&token, pos, &msg);
                 None
             }
         }
@@ -365,7 +590,8 @@ impl<'a> Parser<'a> {
             None => {
                 let msg = format!("could not parse {:?} as float", self.cur_token.literal);
                 let token = self.cur_token.clone();
-                self.emit_error(&token, &msg);
+                let pos = self.token_position.saturating_sub(1);
+                self.emit_error(&token, pos, &msg);
                 None
             }
         }
@@ -389,6 +615,10 @@ impl<'a> Parser<'a> {
     // parse functions in common way "fn something()"
     pub fn parse_function_declaration(&mut self) -> Option<Statement> {
         let fn_token = self.cur_token.clone(); // the ဖန်ရှင် token
+        // Capture position up front so we can build the synthetic let_token after
+        // `fn_token` has been moved into the FunctionLiteral below.
+        let fn_line = fn_token.line;
+        let fn_column = fn_token.column;
 
         // Next token is the function name
         if !self.expect_peek(TokenType::Ident) {
@@ -416,19 +646,15 @@ impl<'a> Parser<'a> {
 
         // Build the function literal expression
         let function_literal = Expression::FunctionLiteral(FunctionLiteral {
-            token: fn_token.clone(),
+            token: fn_token,
             parameters,
             body,
         });
 
-        // Desugar into a Let statement
-        let let_token = Token::new(
-            TokenType::Let,
-            "ထား".to_string(),
-            fn_token.line,
-            fn_token.column,
-            fn_token.token_index,
-        );
+        // Desugar into a Let statement — preserve the function token's position
+        // so any error reporting on this synthetic token still points at the
+        // original `ဖန်ရှင်` keyword.
+        let let_token = Token::new(TokenType::Let, "ထား".to_string(), fn_line, fn_column);
 
         if self.peek_token_is(TokenType::Semicolon) {
             self.next_token();
@@ -502,10 +728,11 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    // function call args (ends with RParen) and array elements (ends with RBracket)
+    // Parses a comma-separated list of expressions ending with `end`
+    // (RParen for call args, RBracket for array elements).
     pub fn parse_expression_list(&mut self, end: TokenType) -> Option<Vec<Expression>> {
         let mut args = Vec::new();
-        // for the function call without arguments like doSomething();
+        // Handle the empty case, e.g. `doSomething()`.
         if self.peek_token_is(end) {
             self.next_token();
             return Some(args);
@@ -515,7 +742,7 @@ impl<'a> Parser<'a> {
         if let Some(expr) = self.parse_expression(Precedence::Lowest) {
             args.push(expr);
         }
-        // for multiple args
+        // Collect any additional comma-separated expressions.
         while self.peek_token_is(TokenType::Comma) {
             self.next_token();
             self.next_token();
@@ -541,10 +768,10 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        return Some(Statement::Return(ReturnStatement {
+        Some(Statement::Return(ReturnStatement {
             token,
             return_value,
-        }));
+        }))
     }
 
     // conditions parser
@@ -557,8 +784,6 @@ impl<'a> Parser<'a> {
 
         self.next_token();
 
-        // We use the `?` operator to safely extract the expression,
-        // or return None early if it fails to parse.
         let condition = self.parse_expression(Precedence::Lowest);
 
         if !self.expect_peek(TokenType::RParen) {
@@ -585,14 +810,14 @@ impl<'a> Parser<'a> {
 
         Some(Expression::IfExpression(IfExpression {
             token,
-            condition: condition.map(Box::new), // Box it here, not up top!
+            condition: condition.map(Box::new), // Box the condition when assembling the node.
             consequence,
             alternative,
         }))
     }
 
     pub fn parse_block_statement(&mut self) -> Option<BlockStatement> {
-        // capture { lbrace
+        // `self.cur_token` is currently the opening `{`.
         let cur_token = self.cur_token.clone();
         let mut statements = Vec::new();
         self.next_token();
@@ -610,7 +835,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    //Parse ArrayLiteral
     // Parse array literal: [1, 2, 3]
     pub fn parse_array_literal(&mut self) -> Option<Expression> {
         let token = self.cur_token.clone();
@@ -618,9 +842,9 @@ impl<'a> Parser<'a> {
         Some(Expression::ArrayLiteral(ArrayLiteral { token, elements }))
     }
 
-    // Parse index expression: myArray[0]
-    // This is an infix parser — [ is treated as the "operator"
-    // left operand = myArray, right operand = 0
+    // Parse index expression: myArray[0].
+    // This is an infix parser — `[` is the operator, with `left` as the
+    // collection and the parsed expression as the index.
     pub fn parse_index_expression(&mut self, left: Expression) -> Option<Expression> {
         let token = self.cur_token.clone();
         self.next_token();
@@ -637,8 +861,8 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    /// Parse hash literal: {"key": value, "key2": value2}
-    /// The `{` is already consumed as cur_token.
+    // Parse hash literal: {"key": value, "key2": value2}.
+    // The `{` is already consumed as cur_token.
     pub fn parse_hash_literal(&mut self) -> Option<Expression> {
         let token = self.cur_token.clone();
         let mut pairs = Vec::new();
@@ -669,69 +893,50 @@ impl<'a> Parser<'a> {
         Some(Expression::HashLiteral(HashLiteral { token, pairs }))
     }
 
-    // loops parser
-    pub fn parse_n_times_loop(&mut self) -> Option<Expression> {
-        let token = self.cur_token.clone();
-        let count = token.literal.parse::<i64>().ok()?;
-
-        if !self.expect_peek(TokenType::TimesLoop) {
-            return None;
-        }
-        if !self.expect_peek(TokenType::LBrace) {
-            return None;
-        }
-
-        let body = self.parse_block_statement();
-
-        Some(Expression::LoopExpression(LoopExpression {
-            token,
-            count: Some(count),
-            condition: None,
-            body,
-        }))
-    }
-
+    // Loop parsers
+    // `ပတ် cond { }` or `ပတ် { }` (while / infinite loop).
     pub fn parse_while_or_inf_loop(&mut self) -> Option<Expression> {
         let token = self.cur_token.clone();
-        let mut condition = None;
 
         if self.peek_token_is(TokenType::LBrace) {
             // Infinite loop syntax: ပတ် {}
             self.next_token();
-        } else {
-            // While loop syntax: ပတ် condition {}
-            self.next_token();
-            condition = self.parse_expression(Precedence::Lowest).map(Box::new);
-            if !self.expect_peek(TokenType::LBrace) {
-                return None;
-            }
+            let body = self.parse_block_statement();
+            return Some(Expression::LoopExpression(LoopExpression {
+                token,
+                kind: LoopKind::Infinite,
+                body,
+            }));
         }
 
+        // While loop syntax: ပတ် condition {}
+        self.next_token();
+        let condition = self.parse_expression(Precedence::Lowest)?;
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
         let body = self.parse_block_statement();
-
         Some(Expression::LoopExpression(LoopExpression {
             token,
-            count: None,
-            condition,
+            kind: LoopKind::While(Box::new(condition)),
             body,
         }))
     }
 
     // Helpers
-    pub fn next_token(&mut self) -> () {
-        // in this part don't get confused, the replace isn't actually replacing it's actually
-        // acting like moving since when rust move it left the part that execute no var at all
-        // might cause panic error so we have two option clone instead of move or this one since
-        // this one is more effecient i used this , but doing self.peek_token.clon() is much
-        // cleaner if you want other cleaner option!!
+    pub fn next_token(&mut self) {
+        // `std::mem::replace` moves `peek_token` out into `cur_token` without
+        // leaving `peek_token` in a moved (unusable) state. Cloning `peek_token`
+        // would also work and read more cleanly, but is slightly less efficient.
         self.cur_token = std::mem::replace(
             &mut self.peek_token,
-            Token::dummy(TokenType::Illegial, "".to_string()),
+            Token::dummy(TokenType::Illegal, String::new()),
         );
         self.peek_token = self.lexer.next_token();
+        self.token_position += 1;
     }
 
-    // notice how in Vec we need to add & explictly
+    // Note: returns a reference (`&Vec<String>`) rather than owning the errors.
     pub fn return_errors(&self) -> &Vec<String> {
         &self.errors
     }
@@ -741,8 +946,98 @@ impl<'a> Parser<'a> {
             "expected next token to be {:?}, got {:?} ('{}') instead.",
             t, self.peek_token.token_type, self.peek_token.literal
         );
+        // The offending token is the peek token (the one we got instead of `t`).
+        // `token_position` tracks cur_token's position + 1 (because Parser::new
+        // calls next_token twice), so it already equals peek_token's actual
+        // 1-based position in the stream.
         let token = self.peek_token.clone();
-        self.emit_error(&token, &msg);
+        let pos = self.token_position;
+        self.emit_error(&token, pos, &msg);
+    }
+
+    /// Build a multi-line error message that includes:
+    ///   - The line number and 1-based token position.
+    ///   - The human-readable message.
+    ///   - The offending source line, prefixed with ` {line_num} | `.
+    ///   - A `^^^` pointer aligned to the offending token's column.
+    ///
+    /// `column` is still tracked on the Token (needed for the `^` pointer), but
+    /// is deliberately NOT shown in the message header — the user asked for the
+    /// format `Error at Line L, Token N: ...` instead.
+    ///
+    /// Special case: when the offending token is EOF (which sits one past the
+    /// last line of input), we fall back to the last non-empty source line so
+    /// the user still gets a visual pointer.
+    fn emit_error(&mut self, token: &Token, token_position: usize, msg: &str) {
+        let lines: Vec<&str> = self.lexer.input.lines().collect();
+        // For EOF (empty literal, line past end of input) fall back to the last
+        // non-empty line so the pointer is still useful.
+        let is_eof = token.token_type == TokenType::Eof;
+        let mut display_line = token.line;
+        let mut display_column = token.column;
+        if is_eof {
+            // Walk backwards from the EOF's line to find a non-empty source line.
+            // `token.line` is 1-based; `lines` is 0-based, so line N is at
+            // `lines[N-1]`. Start at the EOF's line and go backwards.
+            let mut idx = token.line;
+            while idx > 0 {
+                if let Some(l) = lines.get(idx - 1)
+                    && !l.is_empty()
+                {
+                    display_line = idx;
+                    // Point the caret just past the end of the line.
+                    display_column = l.chars().count() + 1;
+                    break;
+                }
+                idx -= 1;
+            }
+            if idx == 0 {
+                // Couldn't find a non-empty line; just use line 1.
+                display_line = 1;
+                display_column = 1;
+            }
+        }
+
+        // Use display_line in the header too, so EOF errors report the line
+        // the user actually sees in the source pointer (not the empty line
+        // the EOF token technically sits on).
+        let mut formatted = format!(
+            "Error at Line {}, Token {}: {}",
+            display_line, token_position, msg
+        );
+
+        let line_idx = display_line.saturating_sub(1);
+        if let Some(source_line) = lines.get(line_idx) {
+            let line_num_str = display_line.to_string();
+            formatted.push_str(&format!("\n {} | {}", line_num_str, source_line));
+
+            // Build the padding so the `^` lines up with the token's column.
+            // Layout: ` {line_num} | {source_line}\n` then spaces under the
+            // prefix, then spaces/tabs matching the source line up to the token.
+            let mut padding = String::new();
+            padding.push_str(&" ".repeat(line_num_str.len() + 3));
+
+            // Column is 1-based and counts characters (not bytes). Skip the
+            // first `column - 1` chars of the source line, preserving tabs.
+            for c in source_line.chars().take(display_column.saturating_sub(1)) {
+                if c == '\t' {
+                    padding.push('\t');
+                } else {
+                    padding.push(' ');
+                }
+            }
+
+            // For EOF the literal is empty, so use at least one caret.
+            let token_len = if is_eof {
+                1
+            } else {
+                token.literal.chars().count().max(1)
+            };
+            let carets = "^".repeat(token_len);
+            formatted.push_str(&format!("\n{}{}", padding, carets));
+        }
+
+        self.errors.push(formatted);
     }
 
     fn register_prefix(&mut self, token_type: TokenType, fn_ptr: PrefixParseFn<'a>) {
@@ -761,7 +1056,8 @@ impl<'a> Parser<'a> {
         self.peek_token.token_type == t
     }
 
-    // note expect_peek do increse the token
+    // `expect_peek` advances to the next token if it matches `t`, otherwise
+    // records a parse error.
     pub fn expect_peek(&mut self, t: TokenType) -> bool {
         if self.peek_token_is(t) {
             self.next_token();
@@ -771,14 +1067,16 @@ impl<'a> Parser<'a> {
             false
         }
     }
-
     pub fn no_prefix_parse_fn_error(&mut self) {
         let msg = format!(
             "no prefix parse function for {:?} ('{}') found",
             self.cur_token.token_type, self.cur_token.literal
         );
+        // `token_position` is 1 ahead of cur_token's actual position (see
+        // the note in peek_error), so subtract 1 to get cur_token's position.
         let token = self.cur_token.clone();
-        self.emit_error(&token, &msg);
+        let pos = self.token_position.saturating_sub(1);
+        self.emit_error(&token, pos, &msg);
     }
 
     pub fn peek_precedence(&self) -> Precedence {
@@ -787,38 +1085,5 @@ impl<'a> Parser<'a> {
 
     pub fn cur_precedence(&self) -> Precedence {
         Precedence::from_token_type(self.cur_token.token_type)
-    }
-
-    fn emit_error(&mut self, token: &Token, msg: &str) {
-        let line_idx = token.line.saturating_sub(1);
-        let lines: Vec<&str> = self.lexer.input.lines().collect();
-
-        let mut formatted_msg = format!(
-            "Error at Line {}, Token {}: {}",
-            token.line, token.token_index, msg
-        );
-
-        if let Some(source_line) = lines.get(line_idx) {
-            let line_num_str = token.line.to_string();
-            formatted_msg.push_str(&format!("\n {} | {}\n", line_num_str, source_line));
-
-            let mut padding = String::new();
-            padding.push_str(&" ".repeat(line_num_str.len() + 4)); // Padding for " 12 | "
-
-            // Use the same whitespace found in the code (tabs vs space) to ensure accurate alignment
-            for c in source_line.chars().take(token.column.saturating_sub(1)) {
-                if c == '\t' {
-                    padding.push('\t');
-                } else {
-                    padding.push(' ');
-                }
-            }
-
-            let token_len = token.literal.chars().count().max(1);
-            let carets = "^".repeat(token_len);
-            formatted_msg.push_str(&format!("{}{}", padding, carets));
-        }
-
-        self.errors.push(formatted_msg);
     }
 }

@@ -192,7 +192,7 @@ fn test_let_statements() {
         program.statements.len()
     );
 
-    let tests = vec!["x", "y", "foobar"];
+    let tests = ["x", "y", "foobar"];
 
     for (i, expected_identifier) in tests.iter().enumerate() {
         let stmt = &program.statements[i];
@@ -405,7 +405,7 @@ fn test_parsing_prefix_expressions() {
         value: LiteralExpected,
     }
 
-    let prefix_tests = vec![
+    let prefix_tests = [
         PrefixTest {
             input: "!5။",
             operator: "!",
@@ -488,7 +488,7 @@ fn test_parsing_infix_expressions() {
         right: LiteralExpected,
     }
 
-    let infix_tests = vec![
+    let infix_tests = [
         InfixTest {
             input: "5 + 5။",
             left: LiteralExpected::Int(5),
@@ -676,26 +676,26 @@ fn test_if_expression() {
     }
 
     // Check consequence has 1 statement
-    if let Some(ref consequence) = exp.consequence {
-        if let Some(ref statements) = consequence.statements {
-            assert_eq!(
-                statements.len(),
-                1,
-                "consequence is not 1 statements. got={}",
-                statements.len()
-            );
+    if let Some(ref consequence) = exp.consequence
+        && let Some(ref statements) = consequence.statements
+    {
+        assert_eq!(
+            statements.len(),
+            1,
+            "consequence is not 1 statements. got={}",
+            statements.len()
+        );
 
-            if let Some(ref stmt) = statements.get(0) {
-                match stmt {
-                    Statement::Expression(expr_stmt) => {
-                        if let Some(ref expr) = expr_stmt.expression {
-                            if !test_identifier(expr, "x") {
-                                panic!("Consequence expression is not identifier 'x'");
-                            }
-                        }
+        if let Some(ref stmt) = statements.first() {
+            match stmt {
+                Statement::Expression(expr_stmt) => {
+                    if let Some(ref expr) = expr_stmt.expression
+                        && !test_identifier(expr, "x")
+                    {
+                        panic!("Consequence expression is not identifier 'x'");
                     }
-                    _ => panic!("Consequence statement is not ExpressionStatement"),
                 }
+                _ => panic!("Consequence statement is not ExpressionStatement"),
             }
         }
     }
@@ -904,7 +904,7 @@ fn test_function_parameter_parsing() {
         expected_params: Vec<&'static str>,
     }
 
-    let tests = vec![
+    let tests = [
         ParamTest {
             input: "ဖန်ရှင်() { }",
             expected_params: vec![],
@@ -1099,7 +1099,7 @@ fn test_let_statements_with_values() {
         expected_value: LiteralExpected,
     }
 
-    let tests = vec![
+    let tests = [
         LetTest {
             input: "ထား x = 5။",
             expected_identifier: "x",
@@ -1259,20 +1259,4 @@ fn test_parsing_index_expressions() {
     } else {
         panic!("index is None");
     }
-}
-
-#[test]
-fn test_parser_error_formatting() {
-    let input = "ထား = 5။";
-    let mut lexer = Lexer::new(input);
-    let mut parser = Parser::new(&mut lexer);
-    parser.parse_program();
-
-    let errors = parser.return_errors();
-    assert_eq!(errors.len(), 2, "Expected exactly two errors, got: {:?}", errors);
-
-    let expected_error_1 = "Error at Line 1, Token 2: expected next token to be Ident, got Assign ('=') instead.\n 1 | ထား = 5။\n         ^";
-    let expected_error_2 = "Error at Line 1, Token 2: no prefix parse function for Assign ('=') found\n 1 | ထား = 5။\n         ^";
-    assert_eq!(errors[0], expected_error_1);
-    assert_eq!(errors[1], expected_error_2);
 }

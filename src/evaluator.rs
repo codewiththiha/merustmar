@@ -17,12 +17,22 @@ pub fn eval_program(program: &Program, env: &Rc<RefCell<Environment>>) -> Option
     for statement in &program.statements {
         result = eval_statement(statement, env);
 
-        // To return back immediately
+        // Unwrap a ReturnValue immediately so `return` propagates out of the program.
         if let Some(Object::ReturnValue(val)) = result {
             return Some(*val);
         }
+        // Stop on the first runtime error.
         if matches!(&result, Some(Object::ErrorObj(_))) {
             return result;
+        }
+        // `break` / `continue` outside a loop is a runtime error.
+        if matches!(&result, Some(Object::Break)) {
+            return Some(Object::ErrorObj("break (ရပ်) outside of a loop".to_string()));
+        }
+        if matches!(&result, Some(Object::Continue)) {
+            return Some(Object::ErrorObj(
+                "continue (ကျော်) outside of a loop".to_string(),
+            ));
         }
     }
 
@@ -45,7 +55,7 @@ pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Opt
             Some(Object::Function(Function {
                 parameters,
                 body,
-                env: Rc::clone(env), // ← shared pointer, NOT deep copy
+                env: Rc::clone(env), // Share the enclosing environment (cheap Rc clone, not a deep copy).
             }))
         }
         Expression::HashLiteral(hl) => eval_hash_literal(hl, env),
@@ -83,8 +93,8 @@ pub fn eval_expression(expr: &Expression, env: &Rc<RefCell<Environment>>) -> Opt
 pub fn eval_statement(statement: &Statement, env: &Rc<RefCell<Environment>>) -> Option<Object> {
     match statement {
         Statement::Let(let_stmt) => {
+            // Evaluate the bound expression, if present.
             let val = let_stmt
-                // value store expressions
                 .value
                 .as_ref()
                 .and_then(|expr| eval_expression(expr, env))?;
@@ -93,8 +103,7 @@ pub fn eval_statement(statement: &Statement, env: &Rc<RefCell<Environment>>) -> 
                 return Some(val);
             }
 
-            // name.value name's from identifier and there's a value
-            // above value's from expressions that's evaluated to an object
+            // Bind the identifier (let_stmt.name.value) to the evaluated object.
             env.borrow_mut().set(let_stmt.name.value.clone(), val);
             None
         }
@@ -135,6 +144,8 @@ pub fn eval_statement(statement: &Statement, env: &Rc<RefCell<Environment>>) -> 
 
             Some(Object::ReturnValue(Box::new(val)))
         }
+        Statement::Break(_) => Some(Object::Break),
+        Statement::Continue(_) => Some(Object::Continue),
         _ => None,
     }
 }
@@ -147,8 +158,13 @@ pub fn eval_block_statement(
 
     for stmt in block.statements.iter().flatten() {
         result = eval_statement(stmt, env);
-        // return back the wrapped (ReturnValue{Something}) back
-        if matches!(&result, Some(Object::ReturnValue(_) | Object::ErrorObj(_))) {
+        // Propagate ReturnValue, ErrorObj, Break, and Continue out of the
+        // block immediately — only the loop evaluator knows how to handle
+        // Break / Continue; everything else must let them bubble up.
+        if matches!(
+            &result,
+            Some(Object::ReturnValue(_) | Object::ErrorObj(_) | Object::Break | Object::Continue)
+        ) {
             return result;
         }
     }
@@ -209,7 +225,16 @@ fn apply_function(function: Object, args: Vec<Object>) -> Option<Object> {
         Object::Function(func) => {
             let extended_env = extended_function_env(&func, args);
             let evaluated = eval_block_statement(&func.body, &extended_env)?;
-            Some(unwrap_return_value(evaluated))
+            // A `break` / `continue` that escapes its function body has no
+            // enclosing loop to act on — turn it into a runtime error so it
+            // doesn't accidentally break a loop in the caller.
+            match evaluated {
+                Object::Break => Some(Object::ErrorObj("break (ရပ်) outside of a loop".to_string())),
+                Object::Continue => Some(Object::ErrorObj(
+                    "continue (ကျော်) outside of a loop".to_string(),
+                )),
+                _ => Some(unwrap_return_value(evaluated)),
+            }
         }
         Object::Builtin(func) => Some(func(args)),
         _ => Some(Object::ErrorObj(format!(
@@ -220,10 +245,10 @@ fn apply_function(function: Object, args: Vec<Object>) -> Option<Object> {
 }
 
 fn extended_function_env(func: &Function, args: Vec<Object>) -> Rc<RefCell<Environment>> {
-    // moves outer to the outer by cloning (rc cloning very cheap) so the func can have both knowledge
+    // Create a child scope of the function's captured environment, then bind
+    // each parameter to its argument in the new scope.
     let env = Environment::new_enclosed(Rc::clone(&func.env));
     for (param, arg) in func.parameters.iter().zip(args) {
-        // this part define new inner
         env.borrow_mut().set(param.value.clone(), arg);
     }
     env
@@ -266,7 +291,7 @@ fn eval_infix_expression(
         return Some(left);
     }
 
-    // Short circuit logic
+    // Short-circuit evaluation for `&&` and `||`.
     match infix.operator.as_str() {
         "&&" => {
             if !is_truthy(&left) {
@@ -376,6 +401,8 @@ pub fn eval_infix_float_expression(left: f64, right: f64, operator: &str) -> Obj
         }
         ">" => Object::Boolean(left > right),
         "<" => Object::Boolean(left < right),
+        ">=" => Object::Boolean(left >= right),
+        "<=" => Object::Boolean(left <= right),
         "==" => Object::Boolean(left == right),
         "!=" => Object::Boolean(left != right),
         _ => Object::ErrorObj(format!("unknown operator: {}", operator)),
@@ -432,6 +459,8 @@ pub fn eval_infix_integer_expression(left: &i64, right: &i64, operator: &str) ->
         }
         ">" => Object::Boolean(left > right),
         "<" => Object::Boolean(left < right),
+        ">=" => Object::Boolean(left >= right),
+        "<=" => Object::Boolean(left <= right),
         "==" => Object::Boolean(left == right),
         "!=" => Object::Boolean(left != right),
         _ => Object::ErrorObj(format!("unknown operator: {}", operator)),
@@ -472,8 +501,8 @@ fn eval_hash_literal(
 }
 
 fn eval_index_expression(left: Object, index: Object) -> Object {
-    // So parser will parse even index's expression results in string or other objects that's not
-    // Integer , this is the part that catch that error.
+    // The parser allows any expression as the index; here we dispatch based
+    // on the runtime types of the left value and the index.
     match (&left, &index) {
         (Object::Array(_), Object::Integer(_)) => eval_array_index_expression(left, index),
         (Object::Hash(_), _) => eval_hash_index_expression(left, index),
@@ -511,7 +540,7 @@ fn eval_array_index_expression(array: Object, index: Object) -> Object {
     };
     let max = (elements.len() as i64) - 1;
     if idx < 0 || idx > max {
-        // showing error message like index out of range might better
+        // Out-of-range access currently returns null.
         return Object::Null;
     }
     elements[idx as usize].clone()
@@ -521,67 +550,215 @@ pub fn eval_loop_expression(
     loop_exp: &crate::ast::LoopExpression,
     env: &Rc<RefCell<Environment>>,
 ) -> Option<Object> {
-    let mut last_eval = Some(Object::Null);
+    use crate::ast::LoopKind;
+    let mut last_eval: Option<Object> = None;
     let body_block = loop_exp.body.as_ref()?;
 
-    // (N-times Loop)
-    if let Some(count) = loop_exp.count {
-        for _ in 0..count {
-            let result = eval_block_statement(body_block, env);
-            if let Some(res) = result {
-                if let Object::ReturnValue(val) = res {
-                    return Some(*val);
-                }
-                if let Object::ErrorObj(_) = &res {
-                    return Some(res);
-                }
-                last_eval = Some(res);
+    // Run the loop body once in `scope_env`. Returns:
+    //   - `Some(Object)` if the body produced a value (last statement was an
+    //     expression) — the caller checks for ReturnValue / ErrorObj / Break /
+    //     Continue to decide what to do.
+    //   - `None` if the body produced no value (e.g. ended in a `let`).
+    let run_body = |scope_env: &Rc<RefCell<Environment>>| -> Option<Object> {
+        eval_block_statement(body_block, scope_env)
+    };
+
+    // Check a body result:
+    //   - ReturnValue  -> propagate out of the loop entirely (return from eval_loop_expression)
+    //   - ErrorObj     -> propagate
+    //   - Break        -> exit the enclosing iteration loop (the Rust `for` / `loop` below)
+    //   - Continue     -> skip to the next iteration of the enclosing iteration loop
+    //   - anything else (including None) -> becomes the new `last_eval`
+    //
+    // The `iter_label` label lets `break`/`continue` inside the macro escape
+    // the outer Rust iteration loop (the one in `Times`, `While`, `ForEach`,
+    // etc.), so a Merustmar `ရပ်` / `ကျော်` from inside the loop body actually
+    // controls the *Merustmar* loop.
+    macro_rules! step {
+        ($iter_env:expr, $iter_label:lifetime) => {{
+            let result = run_body(&$iter_env);
+            match result {
+                Some(Object::ReturnValue(val)) => return Some(*val),
+                Some(Object::ErrorObj(_)) => return result,
+                Some(Object::Break) => break $iter_label,
+                Some(Object::Continue) => continue $iter_label,
+                _ => last_eval = result,
             }
-        }
-        return last_eval;
+        }};
     }
 
-    if let Some(condition) = &loop_exp.condition {
-        loop {
-            let cond_val = eval_expression(condition, env)?;
-            if is_error(&cond_val) {
-                return Some(cond_val);
+    match &loop_exp.kind {
+        // `N ခါပတ် { }` or `N ခါပတ် i { }` — evaluate N at runtime, iterate N times.
+        // If a loop variable is supplied, bind it to the 0-based iteration index.
+        LoopKind::Times { count, var } => {
+            let count_val = eval_expression(count, env)?;
+            if is_error(&count_val) {
+                return Some(count_val);
             }
-            if !is_truthy(&cond_val) {
-                break;
+            let Object::Integer(n) = count_val else {
+                return Some(Object::ErrorObj(format!(
+                    "ခါပတ် count must be INTEGER, got {}",
+                    count_val.object_type()
+                )));
+            };
+            if n < 0 {
+                return Some(Object::ErrorObj(format!(
+                    "ခါပတ် count must be non-negative, got {}",
+                    n
+                )));
             }
-
-            let result = eval_block_statement(body_block, env);
-            if let Some(res) = result {
-                if let Object::ReturnValue(val) = res {
-                    return Some(*val);
+            'times: for i in 0..n {
+                let iter_env = Environment::new_enclosed(Rc::clone(env));
+                if let Some(var) = var {
+                    iter_env
+                        .borrow_mut()
+                        .set(var.value.clone(), Object::Integer(i));
                 }
-
-                if let Object::ErrorObj(_) = res {
-                    return Some(res);
-                }
-
-                last_eval = Some(res);
+                step!(iter_env, 'times);
             }
+            last_eval.or(Some(Object::Null))
         }
-        return last_eval;
-    }
 
-    loop {
-        let result = eval_block_statement(body_block, env);
-        if let Some(res) = result {
-            if let Object::ReturnValue(val) = res {
-                return Some(*val);
+        // `ပတ် cond { }`
+        LoopKind::While(cond) => {
+            'while_loop: loop {
+                let cond_val = eval_expression(cond, env)?;
+                if is_error(&cond_val) {
+                    return Some(cond_val);
+                }
+                if !is_truthy(&cond_val) {
+                    break;
+                }
+                let iter_env = Environment::new_enclosed(Rc::clone(env));
+                step!(iter_env, 'while_loop);
             }
+            last_eval.or(Some(Object::Null))
+        }
 
-            if let Object::ErrorObj(_) = res {
-                return Some(res);
+        // `ပတ် { }` — infinite loop. Only `return` / `break` / errors can exit.
+        LoopKind::Infinite => 'inf_loop: loop {
+            let iter_env = Environment::new_enclosed(Rc::clone(env));
+            let result = run_body(&iter_env);
+            match result {
+                Some(Object::ReturnValue(val)) => return Some(*val),
+                Some(Object::ErrorObj(_)) => return result,
+                Some(Object::Break) => break 'inf_loop last_eval.or(Some(Object::Null)),
+                Some(Object::Continue) => continue 'inf_loop,
+                _ => {}
             }
+        },
+
+        // `arr ကနေ item ထိပတ် { }` — bind `item` to each element.
+        LoopKind::ForEach { source, var } => {
+            let src_val = eval_expression(source, env)?;
+            if is_error(&src_val) {
+                return Some(src_val);
+            }
+            let Object::Array(elements) = src_val else {
+                return Some(Object::ErrorObj(format!(
+                    "ကနေ for-each source must be ARRAY, got {}",
+                    src_val.object_type()
+                )));
+            };
+            'foreach: for elem in elements.iter() {
+                let iter_env = Environment::new_enclosed(Rc::clone(env));
+                iter_env.borrow_mut().set(var.value.clone(), elem.clone());
+                step!(iter_env, 'foreach);
+            }
+            last_eval.or(Some(Object::Null))
+        }
+
+        // `arr ကနေ item, idx ထိပတ် { }` — bind both element and 0-based index.
+        LoopKind::ForEachIndex { source, var, index } => {
+            let src_val = eval_expression(source, env)?;
+            if is_error(&src_val) {
+                return Some(src_val);
+            }
+            let Object::Array(elements) = src_val else {
+                return Some(Object::ErrorObj(format!(
+                    "ကနေ for-each source must be ARRAY, got {}",
+                    src_val.object_type()
+                )));
+            };
+            'foreach_idx: for (i, elem) in elements.iter().enumerate() {
+                let iter_env = Environment::new_enclosed(Rc::clone(env));
+                iter_env.borrow_mut().set(var.value.clone(), elem.clone());
+                iter_env
+                    .borrow_mut()
+                    .set(index.value.clone(), Object::Integer(i as i64));
+                step!(iter_env, 'foreach_idx);
+            }
+            last_eval.or(Some(Object::Null))
+        }
+
+        // `start ကနေ end ထိပတ် { }` — iterate start..=end, no loop variable.
+        LoopKind::Range { start, end } => {
+            let start_val = eval_expression(start, env)?;
+            if is_error(&start_val) {
+                return Some(start_val);
+            }
+            let end_val = eval_expression(end, env)?;
+            if is_error(&end_val) {
+                return Some(end_val);
+            }
+            let (Object::Integer(s), Object::Integer(e)) = (&start_val, &end_val) else {
+                return Some(Object::ErrorObj(format!(
+                    "ကနေ range bounds must be INTEGER, got {} and {}",
+                    start_val.object_type(),
+                    end_val.object_type()
+                )));
+            };
+            let (s, e) = (*s, *e);
+            if s > e {
+                return Some(Object::ErrorObj(format!(
+                    "ကနေ range start ({}) > end ({})",
+                    s, e
+                )));
+            }
+            'range: for _ in s..=e {
+                let iter_env = Environment::new_enclosed(Rc::clone(env));
+                step!(iter_env, 'range);
+            }
+            last_eval.or(Some(Object::Null))
+        }
+
+        // `start ကနေ end ထိပတ် var { }` — iterate start..=end, bind `var` to current.
+        LoopKind::RangeVar { start, end, var } => {
+            let start_val = eval_expression(start, env)?;
+            if is_error(&start_val) {
+                return Some(start_val);
+            }
+            let end_val = eval_expression(end, env)?;
+            if is_error(&end_val) {
+                return Some(end_val);
+            }
+            let (Object::Integer(s), Object::Integer(e)) = (&start_val, &end_val) else {
+                return Some(Object::ErrorObj(format!(
+                    "ကနေ range bounds must be INTEGER, got {} and {}",
+                    start_val.object_type(),
+                    end_val.object_type()
+                )));
+            };
+            let (s, e) = (*s, *e);
+            if s > e {
+                return Some(Object::ErrorObj(format!(
+                    "ကနေ range start ({}) > end ({})",
+                    s, e
+                )));
+            }
+            'range_var: for v in s..=e {
+                let iter_env = Environment::new_enclosed(Rc::clone(env));
+                iter_env
+                    .borrow_mut()
+                    .set(var.value.clone(), Object::Integer(v));
+                step!(iter_env, 'range_var);
+            }
+            last_eval.or(Some(Object::Null))
         }
     }
 }
 
-// helpers
+// Helpers
 pub fn is_truthy(obj: &Object) -> bool {
     match obj {
         Object::Null => false,

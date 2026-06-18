@@ -24,13 +24,19 @@ impl Environment {
     }
 
     pub fn reassign(&mut self, name: String, val: Object) -> Result<(), String> {
-        if self.store.contains_key(&name) {
-            self.store.insert(name, val);
-            Ok(())
-        } else if let Some(ref outer) = self.outer {
-            outer.borrow_mut().reassign(name, val)
-        } else {
-            Err(format!("Cannot reassign undefined identifier: {}", name))
+        use std::collections::hash_map::Entry;
+        match self.store.entry(name.clone()) {
+            Entry::Occupied(mut e) => {
+                e.insert(val);
+                Ok(())
+            }
+            Entry::Vacant(_) => {
+                if let Some(ref outer) = self.outer {
+                    outer.borrow_mut().reassign(name, val)
+                } else {
+                    Err(format!("Cannot reassign undefined identifier: {}", name))
+                }
+            }
         }
     }
 

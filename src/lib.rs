@@ -14,7 +14,7 @@ use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn run_merustmar(input: &str) -> String {
-    // Clear the output buffer from previous runs
+    // Reset the output buffer from any previous run.
     crate::builtins::OUTPUT_BUFFER.with(|b| b.borrow_mut().clear());
 
     let mut lexer = lexer::Lexer::new(input);
@@ -24,13 +24,13 @@ pub fn run_merustmar(input: &str) -> String {
 
     let errors = parser.return_errors();
     if !errors.is_empty() {
-        // Space them beautifully
+        // Each error message is already multi-line (header + source line + ^^^).
+        // Separate consecutive errors with a blank line for readability.
         return format!("Parser Errors:\n{}", errors.join("\n\n"));
     }
 
-    // Evaluate
     evaluator::eval_program(&program, &env);
 
-    // Fetch whatever was printed
+    // Return whatever `ရေး(...)` printed during evaluation.
     crate::builtins::OUTPUT_BUFFER.with(|b| b.borrow().clone())
 }

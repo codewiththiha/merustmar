@@ -64,7 +64,7 @@ pub fn draw_border(_cols: u16, _rows: u16) -> Result<(), String> {
     Ok(())
 }
 
-// lifecycle
+// Lifecycle
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init() -> Result<(), String> {
@@ -80,11 +80,11 @@ pub fn init() -> Result<(), String> {
     Ok(())
 }
 
-/// Restores the terminal. Safe to call multiple times / when not initialized.
+// Restores the terminal. Safe to call multiple times or when not initialized.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn cleanup() {
     if !INITIALIZED.swap(false, Ordering::SeqCst) {
-        return; // was not initialized
+        return; // Nothing to do if init() was never called.
     }
     let mut out = stdout();
     let _ = out.execute(Show);
@@ -92,7 +92,7 @@ pub fn cleanup() {
     let _ = out.execute(LeaveAlternateScreen);
 }
 
-// primitives
+// Primitives
 #[cfg(not(target_arch = "wasm32"))]
 pub fn clear_screen() -> Result<(), String> {
     stdout()
@@ -134,18 +134,17 @@ pub fn print_at_center(
     print_at(cx + x, cy + y, text)
 }
 
-//  input
+// Input
 #[cfg(not(target_arch = "wasm32"))]
 pub fn poll_key(timeout_ms: u64) -> Result<Option<String>, String> {
-    if event::poll(Duration::from_millis(timeout_ms)).map_err(|e| e.to_string())? {
-        if let Event::Key(KeyEvent {
+    if event::poll(Duration::from_millis(timeout_ms)).map_err(|e| e.to_string())?
+        && let Event::Key(KeyEvent {
             code,
             kind: KeyEventKind::Press,
             ..
         }) = event::read().map_err(|e| e.to_string())?
-        {
-            return Ok(Some(keycode_str(code)));
-        }
+    {
+        return Ok(Some(keycode_str(code)));
     }
     Ok(None)
 }

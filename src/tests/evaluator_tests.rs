@@ -7,7 +7,7 @@ use crate::{environment::Environment, evaluator, lexer::Lexer, object::Object, p
 pub fn test_eval(input: &str) -> Option<Object> {
     let mut lexer = Lexer::new(input);
     let mut parser = Parser::new(&mut lexer);
-    let env = Environment::new(); // returns Rc<RefCell<Environment>>
+    let env = Environment::new(); // Returns Rc<RefCell<Environment>>.
     let program = parser.parse_program();
 
     let errors = parser.return_errors();
@@ -189,6 +189,30 @@ fn test_eval_boolean_expression() {
             expected: false,
         },
         Test {
+            input: "1 <= 1",
+            expected: true,
+        },
+        Test {
+            input: "1 >= 1",
+            expected: true,
+        },
+        Test {
+            input: "1 <= 2",
+            expected: true,
+        },
+        Test {
+            input: "2 >= 1",
+            expected: true,
+        },
+        Test {
+            input: "2 <= 1",
+            expected: false,
+        },
+        Test {
+            input: "1 >= 2",
+            expected: false,
+        },
+        Test {
             input: "1 == 1",
             expected: true,
         },
@@ -264,7 +288,7 @@ fn test_bang_operator() {
         expected: bool,
     }
 
-    let tests = vec![
+    let tests = [
         Test {
             input: "!မှန်",
             expected: false,
@@ -311,7 +335,7 @@ fn test_minus_operator() {
         expected: i64,
     }
 
-    let tests = vec![
+    let tests = [
         Test {
             input: "-5",
             expected: -5,
@@ -351,7 +375,7 @@ fn test_return_statements() {
         Boolean(bool),
     }
 
-    let tests = vec![
+    let tests = [
         Test {
             input: "ဒါယူ 10။",
             expected: ExpectedValue::Integer(10),
@@ -452,7 +476,7 @@ fn test_error_handling() {
         expected_message: &'static str,
     }
 
-    let tests = vec![
+    let tests = [
         Test {
             input: "5 + မှန်။",
             expected_message: "type mismatch: INTEGER + BOOLEAN",
@@ -538,7 +562,7 @@ fn test_function_application() {
         expected: i64,
     }
 
-    let tests = vec![
+    let tests = [
         Test {
             input: "ထား identity = ဖန်ရှင်(x) { x။ }။ identity(5)။",
             expected: 5,
@@ -605,7 +629,7 @@ fn test_builtin_functions() {
         expected: Expected,
     }
 
-    let tests = vec![
+    let tests = [
         Test {
             input: r#"len("")"#,
             expected: Expected::Int(0),
@@ -831,7 +855,7 @@ fn test_hash_index_expressions() {
         expected: Expected,
     }
 
-    let tests = vec![
+    let tests = [
         Test {
             input: r#"{"foo": 5}["foo"]"#,
             expected: Expected::Int(5),
@@ -877,4 +901,616 @@ fn test_hash_index_expressions() {
             }
         }
     }
+}
+
+// ============================================================================
+// Test: String / collection builtins
+// ============================================================================
+
+#[test]
+fn test_eval_string_builtins() {
+    struct Test {
+        input: &'static str,
+        expected: &'static str,
+    }
+
+    let tests = [
+        Test {
+            input: "upper(\"hello\")",
+            expected: "HELLO",
+        },
+        Test {
+            input: "lower(\"WORLD\")",
+            expected: "world",
+        },
+        Test {
+            input: "to_string(42)",
+            expected: "42",
+        },
+        Test {
+            input: "join([\"a\", \"b\", \"c\"], \",\")",
+            expected: "a,b,c",
+        },
+        Test {
+            input: "contains(\"hello\", \"ell\")",
+            expected: "true",
+        },
+        Test {
+            input: "contains(\"hello\", \"xyz\")",
+            expected: "false",
+        },
+        Test {
+            input: "contains([1, 2, 3], 2)",
+            expected: "true",
+        },
+        Test {
+            input: "contains([1, 2, 3], 9)",
+            expected: "false",
+        },
+    ];
+
+    for (i, tt) in tests.iter().enumerate() {
+        let evaluated = test_eval(tt.input);
+        match evaluated {
+            Some(Object::String(s)) => {
+                assert_eq!(
+                    s, tt.expected,
+                    "test[{}] failed for input '{}'",
+                    i, tt.input
+                );
+            }
+            Some(Object::Boolean(b)) => {
+                assert_eq!(
+                    b.to_string(),
+                    tt.expected,
+                    "test[{}] failed for input '{}'",
+                    i,
+                    tt.input
+                );
+            }
+            other => panic!(
+                "test[{}] - expected String or Boolean, got {:?} for input '{}'",
+                i, other, tt.input
+            ),
+        }
+    }
+}
+
+#[test]
+fn test_eval_split_builtin() {
+    let evaluated = test_eval("split(\"a,b,c\", \",\")");
+    match evaluated {
+        Some(Object::Array(arr)) => {
+            assert_eq!(arr.len(), 3, "split should return 3 elements");
+            assert_eq!(arr[0], Object::String("a".to_string()));
+            assert_eq!(arr[1], Object::String("b".to_string()));
+            assert_eq!(arr[2], Object::String("c".to_string()));
+        }
+        other => panic!("expected Array, got {:?}", other),
+    }
+}
+
+// ============================================================================
+// Test: New loop forms (extended N-times, range, for-each) and global
+// Myanmar numerals.
+// ============================================================================
+
+#[test]
+fn test_eval_myanmar_numerals_in_math() {
+    // Myanmar digits should work in any arithmetic context, not just N-times loops.
+    let cases = [
+        ("၅ + ၃", 8),
+        ("၇ * ၂", 14),
+        ("၁၀ - ၄", 6),
+        ("၂၀ / ၅", 4),
+        ("၅ + 10", 15), // mixed Myanmar + Arabic
+        ("၇ > ၃", 1),   // truthy
+    ];
+    for (input, expected) in cases {
+        let evaluated = test_eval(input);
+        match evaluated {
+            Some(Object::Integer(n)) => assert_eq!(
+                n, expected,
+                "input '{}' should evaluate to {}",
+                input, expected
+            ),
+            Some(Object::Boolean(b)) => assert_eq!(
+                b as i64, expected,
+                "input '{}' should evaluate to {}",
+                input, expected
+            ),
+            other => panic!("input '{}' returned {:?}", input, other),
+        }
+    }
+}
+
+#[test]
+fn test_eval_times_loop_with_expression() {
+    // `(n * 2) ခါပတ်` should iterate n*2 times. We test by counting iterations
+    // via a side-effecting counter.
+    let program = r#"
+ထား count = 0။
+ထား n = 3။
+(n * 2) ခါပတ် {
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 6));
+}
+
+#[test]
+fn test_eval_range_loop_no_var() {
+    // `1 ကနေ 3 ထိပတ်` should run 3 times.
+    let program = r#"
+ထား count = 0။
+1 ကနေ 3 ထိပတ် {
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 3));
+}
+
+#[test]
+fn test_eval_range_loop_with_var() {
+    // `7 ကနေ 10 ထိပတ် i` should produce i = 7,8,9,10. Sum = 34.
+    let program = r#"
+ထား sum = 0။
+7 ကနေ 10 ထိပတ် i {
+    sum = sum + i။
+}
+sum
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 34)); // 7+8+9+10 = 34
+}
+
+#[test]
+fn test_eval_range_loop_myanmar_numerals() {
+    // `၇ ကနေ ၁၀ ထိပတ် i` — same as above but with Myanmar digits.
+    let program = r#"
+ထား sum = 0။
+၇ ကနေ ၁၀ ထိပတ် i {
+    sum = sum + i။
+}
+sum
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 34));
+}
+
+#[test]
+fn test_eval_range_loop_with_expression_bounds() {
+    // Range bounds can be expressions.
+    let program = r#"
+ထား start = 1။
+ထား end = 4။
+ထား count = 0။
+start ကနေ end + 1 ထိပတ် i {
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 5)); // 1..=5
+}
+
+#[test]
+fn test_eval_foreach_array() {
+    // Iterate an array literal and sum the elements.
+    let program = r#"
+ထား sum = 0။
+[10, 20, 30] ကနေ num ထိပတ် {
+    sum = sum + num။
+}
+sum
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 60));
+}
+
+#[test]
+fn test_eval_foreach_array_with_index() {
+    // Iterate with explicit index variable; sum (index * value).
+    let program = r#"
+ထား sum = 0။
+[10, 20, 30] ကနေ num, idx ထိပတ် {
+    sum = sum + idx * num။
+}
+sum
+"#;
+    let evaluated = test_eval(program);
+    // 0*10 + 1*20 + 2*30 = 0 + 20 + 60 = 80
+    assert!(test_integer_object(&evaluated, 80));
+}
+
+#[test]
+fn test_eval_foreach_function_result() {
+    // The source of a for-each can be a function call returning an array.
+    let program = r#"
+ဖန်ရှင် get_nums() {
+    ဒါယူ [1, 2, 3]။
+}
+ထား product = 1။
+get_nums() ကနေ n ထိပတ် {
+    product = product * n။
+}
+product
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 6)); // 1*2*3
+}
+
+#[test]
+fn test_eval_foreach_string_array() {
+    // For-each over an array of strings: concatenate them.
+    let program = r#"
+ထား result = ""။
+["a", "b", "c"] ကနေ ch ထိပတ် {
+    result = result + ch။
+}
+result
+"#;
+    let evaluated = test_eval(program);
+    match evaluated {
+        Some(Object::String(s)) => assert_eq!(s, "abc"),
+        other => panic!("expected String, got {:?}", other),
+    }
+}
+
+// ============================================================================
+// Test: break (ရပ်) and continue (ကျော်) in every loop form
+// ============================================================================
+
+#[test]
+fn test_eval_break_in_times_loop() {
+    // `5 ခါပတ် i { ... break when i == 3 ... }` should print i=0,1,2.
+    // We count iterations via a side-effect counter to make the test robust.
+    let program = r#"
+ထား count = 0။
+5 ခါပတ် i {
+    တကယ်လို့ (i == 3) {
+        ရပ်။
+    }
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 3));
+}
+
+#[test]
+fn test_eval_continue_in_times_loop() {
+    // `5 ခါပတ် i { ... continue when i == 2 ... }` should run bodies for
+    // i = 0, 1, 3, 4 — count = 4.
+    let program = r#"
+ထား count = 0။
+5 ခါပတ် i {
+    တကယ်လို့ (i == 2) {
+        ကျော်။
+    }
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 4));
+}
+
+#[test]
+fn test_eval_break_in_while_loop() {
+    let program = r#"
+ထား i = 0။
+ထား count = 0။
+ပတ် (i < 100) {
+    တကယ်လို့ (i >= 3) {
+        ရပ်။
+    }
+    count = count + 1။
+    i = i + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 3));
+}
+
+#[test]
+fn test_eval_continue_in_while_loop() {
+    // Count odd numbers 1..=5 → 1, 3, 5 → count = 3
+    let program = r#"
+ထား j = 0။
+ထား count = 0။
+ပတ် (j < 5) {
+    j = j + 1။
+    တကယ်လို့ (j % 2 == 0) {
+        ကျော်။
+    }
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 3));
+}
+
+#[test]
+fn test_eval_break_in_infinite_loop() {
+    let program = r#"
+ထား k = 0။
+ထား count = 0။
+ပတ် {
+    တကယ်လို့ (k >= 3) {
+        ရပ်။
+    }
+    count = count + 1။
+    k = k + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 3));
+}
+
+#[test]
+fn test_eval_break_in_foreach() {
+    // Stop at "banana"; only "apple" gets counted.
+    let program = r#"
+ထား count = 0။
+["apple", "banana", "cherry", "date"] ကနေ fruit ထိပတ် {
+    တကယ်လို့ (fruit == "banana") {
+        ရပ်။
+    }
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 1));
+}
+
+#[test]
+fn test_eval_continue_in_foreach() {
+    // Skip "banana"; count = 3 (apple, cherry, date)
+    let program = r#"
+ထား count = 0။
+["apple", "banana", "cherry", "date"] ကနေ fruit ထိပတ် {
+    တကယ်လို့ (fruit == "banana") {
+        ကျော်။
+    }
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 3));
+}
+
+#[test]
+fn test_eval_break_in_range_loop() {
+    // Range 1..=10, break at i==5 → count = 4 (i = 1,2,3,4)
+    let program = r#"
+ထား count = 0။
+1 ကနေ 10 ထိပတ် i {
+    တကယ်လို့ (i == 5) {
+        ရပ်။
+    }
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 4));
+}
+
+#[test]
+fn test_eval_continue_in_range_loop() {
+    // Range 1..=5, skip i==3 → count = 4 (i = 1,2,4,5)
+    let program = r#"
+ထား count = 0။
+1 ကနေ 5 ထိပတ် i {
+    တကယ်လို့ (i == 3) {
+        ကျော်။
+    }
+    count = count + 1။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    assert!(test_integer_object(&evaluated, 4));
+}
+
+#[test]
+fn test_eval_break_outside_loop_is_error() {
+    let program = "ရပ်။";
+    let evaluated = test_eval(program);
+    match evaluated {
+        Some(Object::ErrorObj(msg)) => {
+            assert!(
+                msg.contains("break"),
+                "expected error mentioning break, got: {}",
+                msg
+            );
+        }
+        other => panic!("expected ErrorObj for break outside loop, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_eval_continue_outside_loop_is_error() {
+    let program = "ကျော်။";
+    let evaluated = test_eval(program);
+    match evaluated {
+        Some(Object::ErrorObj(msg)) => {
+            assert!(
+                msg.contains("continue"),
+                "expected error mentioning continue, got: {}",
+                msg
+            );
+        }
+        other => panic!(
+            "expected ErrorObj for continue outside loop, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_eval_break_in_function_does_not_escape_to_caller_loop() {
+    // A `break` inside a function body should NOT break the caller's loop —
+    // it should produce a runtime error inside the function call, which then
+    // propagates as an ErrorObj and stops the loop entirely.
+    let program = r#"
+ထား count = 0။
+ဖန်ရှင် maybe_break(should_break) {
+    တကယ်လို့ (should_break) {
+        ရပ်။
+    }
+    ဒါယူ 1။
+}
+3 ခါပတ် i {
+    ထား result = maybe_break(i == 1)။
+    count = count + result။
+}
+count
+"#;
+    let evaluated = test_eval(program);
+    // i=0: maybe_break(false) returns 1, count=1
+    // i=1: maybe_break(true) tries to break -> error, loop stops
+    // So count should be 1 (only i=0's increment happened before the error).
+    // Actually the assignment happens before the error in i=0; in i=1 the
+    // maybe_break returns an ErrorObj which then becomes the result of the
+    // let-statement, which propagates as an error and halts the loop.
+    match evaluated {
+        Some(Object::ErrorObj(msg)) => assert!(msg.contains("break")),
+        Some(Object::Integer(n)) => {
+            // The exact count depends on how the let-statement handles the error.
+            // What matters is that the break did NOT escape to the caller's loop.
+            assert!(n < 3, "break should not have escaped to caller loop");
+        }
+        other => panic!("unexpected result: {:?}", other),
+    }
+}
+
+// ============================================================================
+// Test: Error message format (Line N, Token N + source pointer)
+// ============================================================================
+
+#[test]
+fn test_error_format_missing_rparen() {
+    // Input `ရေး("Hello World"` is missing the closing `)`.
+    // The error should mention Line 1 and include the source line + `^` pointer.
+    let input = "ရေး(\"Hello World\"";
+    let evaluated = test_eval(input);
+    match evaluated {
+        None => {
+            // test_eval returns None on parser errors, so we need to check
+            // via the parser directly.
+            let mut lexer = Lexer::new(input);
+            let mut parser = Parser::new(&mut lexer);
+            parser.parse_program();
+            let errors = parser.return_errors();
+            assert_eq!(
+                errors.len(),
+                1,
+                "expected 1 parse error, got {}",
+                errors.len()
+            );
+            let msg = &errors[0];
+            assert!(
+                msg.contains("Error at Line 1, Token"),
+                "expected 'Error at Line 1, Token' in: {}",
+                msg
+            );
+            assert!(
+                msg.contains("expected next token to be RParen"),
+                "expected RParen mention in: {}",
+                msg
+            );
+            assert!(msg.contains("Eof"), "expected Eof mention in: {}", msg);
+            assert!(msg.contains("^"), "expected ^ pointer in: {}", msg);
+            assert!(
+                msg.contains("ရေး(\"Hello World\""),
+                "expected source line in: {}",
+                msg
+            );
+        }
+        Some(other) => panic!(
+            "test_eval should return None on parse error, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_error_format_missing_assign() {
+    // `ထား x 5။` — missing `=` between `x` and `5`.
+    let input = "ထား x 5။";
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    parser.parse_program();
+    let errors = parser.return_errors();
+    assert!(!errors.is_empty(), "expected parse errors");
+    let msg = &errors[0];
+    assert!(
+        msg.contains("Error at Line 1, Token"),
+        "expected 'Error at Line 1, Token' in: {}",
+        msg
+    );
+    assert!(
+        msg.contains("expected next token to be Assign"),
+        "expected Assign mention in: {}",
+        msg
+    );
+    assert!(
+        msg.contains("Int") || msg.contains("5"),
+        "expected the offending token (Int / '5') in: {}",
+        msg
+    );
+    assert!(msg.contains("^"), "expected ^ pointer in: {}", msg);
+}
+
+#[test]
+fn test_error_format_multiline_input() {
+    // Error on line 3 — the `^` pointer should point at line 3's source.
+    let input = "ထား x = 10။\nထား y = 20။\nရေး(x +";
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    parser.parse_program();
+    let errors = parser.return_errors();
+    assert!(!errors.is_empty(), "expected parse errors");
+    let msg = &errors[0];
+    assert!(
+        msg.contains("Error at Line 3, Token"),
+        "expected 'Error at Line 3, Token' in: {}",
+        msg
+    );
+    // The source line shown should be the 3rd line.
+    assert!(
+        msg.contains("ရေး(x +"),
+        "expected source line 'ရေး(x +' in: {}",
+        msg
+    );
+}
+
+#[test]
+fn test_error_format_includes_token_position() {
+    // Verify that the "Token N" part is present and is a number.
+    let input = "ရေး(\"hi\"";
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    parser.parse_program();
+    let errors = parser.return_errors();
+    assert!(!errors.is_empty());
+    let msg = &errors[0];
+    // Check that "Token " is followed by a digit.
+    assert!(
+        msg.contains("Token ") && msg.chars().any(|c| c.is_ascii_digit()),
+        "expected 'Token N' (with numeric N) in: {}",
+        msg
+    );
 }

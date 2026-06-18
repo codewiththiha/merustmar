@@ -8,7 +8,7 @@ fn test_next_token_myanmar_full() {
 x + y။
 }။
 ထား result = add(five, ten)။
-!-/ *5။
+! - / * 5။
 5 < 10 > 5။
 တကယ်လို့ (5 < 10) {
 ဒါယူ မှန်။
@@ -129,34 +129,5 @@ x + y။
             "tests[{}] - literal wrong. expected={:?}, got={:?}",
             i, expected_literal, tok.literal
         );
-    }
-}
-
-#[test]
-fn test_lexer_token_index() {
-    let input = "ထား x = 5။\nထား y = 10။";
-    let mut lexer = Lexer::new(input);
-
-    let expected = vec![
-        // Line 1
-        (TokenType::Let, "ထား", 1, 1),
-        (TokenType::Ident, "x", 1, 2),
-        (TokenType::Assign, "=", 1, 3),
-        (TokenType::Int, "5", 1, 4),
-        (TokenType::Semicolon, "။", 1, 5),
-        // Line 2
-        (TokenType::Let, "ထား", 2, 1),
-        (TokenType::Ident, "y", 2, 2),
-        (TokenType::Assign, "=", 2, 3),
-        (TokenType::Int, "10", 2, 4),
-        (TokenType::Semicolon, "။", 2, 5),
-    ];
-
-    for (i, (expected_type, expected_literal, expected_line, expected_token_idx)) in expected.iter().enumerate() {
-        let tok = lexer.next_token();
-        assert_eq!(tok.token_type, *expected_type, "test[{}] type mismatch", i);
-        assert_eq!(tok.literal, *expected_literal, "test[{}] literal mismatch", i);
-        assert_eq!(tok.line, *expected_line, "test[{}] line mismatch", i);
-        assert_eq!(tok.token_index, *expected_token_idx, "test[{}] token_index mismatch", i);
     }
 }

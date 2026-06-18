@@ -3,14 +3,21 @@ use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::{evaluator, terminal};
 use std::fs;
+use std::process;
 
 pub fn run_file(path: &str) {
     if !path.ends_with(".mrm") {
-        eprintln!("Error: File must have .mrm extension");
-        return;
+        eprintln!("Error: File must have a .mrm extension. Got: {}", path);
+        process::exit(1);
     }
 
-    let contents = fs::read_to_string(path).expect("Could not read file");
+    let contents = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("Error: Could not read file '{}': {}", path, err);
+            process::exit(1);
+        }
+    };
 
     let mut lexer = Lexer::new(&contents);
     let mut parser = Parser::new(&mut lexer);
@@ -19,7 +26,6 @@ pub fn run_file(path: &str) {
 
     let errors = parser.return_errors();
     if !errors.is_empty() {
-        // let mut stdout = io::stdout();
         print_parser_errors(errors);
         terminal::cleanup();
         return;
@@ -29,13 +35,18 @@ pub fn run_file(path: &str) {
     terminal::cleanup();
 
     if let Some(obj) = result {
-        println!("{}", obj.inspect());
+        // Skip printing `null` so scripts ending in a block don't dump a stray `null`.
+        if !matches!(obj, crate::object::Object::Null) {
+            println!("{}", obj.inspect());
+        }
     }
 }
 
 fn print_parser_errors(errors: &[String]) {
     eprintln!("Oops! We ran into some syntax errors:");
     for msg in errors {
+        // Each error message is already multi-line (header + source line + ^^^).
+        // Separate consecutive errors with a blank line for readability.
         eprintln!("{}\n", msg);
     }
 }

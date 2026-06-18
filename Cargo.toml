@@ -1,7 +1,22 @@
 [package]
 name = "merustmar"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
+description = "A Myanmar (Burmese) scripting language interpreter written in Rust"
+license = "MIT"
+repository = "https://github.com/codewiththiha/merustmar"
+homepage = "https://github.com/codewiththiha/merustmar"
+documentation = "https://github.com/codewiththiha/merustmar#readme"
+readme = "README.md"
+keywords = [
+  "interpreter",
+  "programming-language",
+  "myanmar",
+  "burmese",
+  "scripting",
+]
+categories = ["compilers", "development-tools", "parser-implementations"]
+exclude = ["/.github", "/.gitignore", "/examples", "/target"]
 
 [dependencies]
 rand = "0.10.1"
@@ -24,5 +39,8 @@ getrandom = { version = "0.4.2", features = ["wasm_js"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 crossterm = "0.29.0"
 
+# The bundled wasm-opt in wasm-pack refuses the bulk-memory operations that
+# modern Rust emits, failing the build with "Bulk memory operations require
+# bulk memory". Modern browsers support these natively, so we skip wasm-opt.
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false

@@ -1,6 +1,6 @@
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Copy)]
 pub enum TokenType {
-    Illegial,
+    Illegal,
     Eof,
 
     // Identifiers + Literals
@@ -19,6 +19,8 @@ pub enum TokenType {
 
     Lt,
     Gt,
+    LtEq,
+    GtEq,
 
     Eq,
     NotEq,
@@ -54,7 +56,11 @@ pub enum TokenType {
 
     // Loops
     Loop,
-    TimesLoop,
+    TimesLoop,  // ခါပတ် — N-times loop marker
+    FromMarker, // ကနေ — "from" marker for for-each / range loops
+    UntilLoop,  // ထိပတ် — "until" loop marker
+    Break,      // ရပ် — break out of the enclosing loop
+    Continue,   // ကျော် — skip to the next iteration of the enclosing loop
     MyanmarInt,
 }
 
@@ -64,28 +70,27 @@ pub struct Token {
     pub literal: String,
     pub line: usize,
     pub column: usize,
-    pub token_index: usize,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, literal: String, line: usize, column: usize, token_index: usize) -> Self {
+    pub fn new(token_type: TokenType, literal: String, line: usize, column: usize) -> Self {
         Token {
             token_type,
             literal,
             line,
             column,
-            token_index,
         }
     }
 
-    /// Helper for creating placeholder tokens easily
+    /// Helper for creating placeholder tokens (e.g. before the first `next_token`
+    /// call). Line/column are 0 so any accidental use in an error message is
+    /// visually obvious.
     pub fn dummy(token_type: TokenType, literal: String) -> Self {
         Token {
             token_type,
             literal,
             line: 0,
             column: 0,
-            token_index: 0,
         }
     }
 
@@ -101,6 +106,10 @@ impl Token {
             "လို့ထား" => TokenType::LetSuffix,
             "ပတ်" => TokenType::Loop,
             "ခါပတ်" => TokenType::TimesLoop,
+            "ကနေ" => TokenType::FromMarker,
+            "ထိပတ်" => TokenType::UntilLoop,
+            "ရပ်" => TokenType::Break,
+            "ကျော်" => TokenType::Continue,
             _ => TokenType::Ident,
         }
     }

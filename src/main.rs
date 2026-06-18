@@ -13,11 +13,33 @@ mod terminal;
 pub mod tests;
 mod token;
 
+const HELP_TEXT: &str = "\
+Merustmar — a Myanmar (Burmese) scripting language interpreter.
+
+USAGE:
+    merustmar <COMMAND> [ARGS]
+
+COMMANDS:
+    --input                  Start the interactive REPL
+    --run <file.mrm>         Run a Merustmar source file
+    --help, -h               Show this help message
+    --version, -V            Print version information
+
+EXAMPLES:
+    merustmar --input
+    merustmar --run examples/hello.mrm
+
+REPL:
+    Type expressions and press Enter to evaluate.
+    Press Ctrl+D (or Ctrl+C) to exit the REPL.
+";
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
+    // With no arguments, print the help text and exit.
     if args.len() < 2 {
-        print_usage();
+        print_help();
         return;
     }
 
@@ -29,19 +51,26 @@ fn main() {
         }
         "--run" => {
             if args.len() < 3 {
-                eprintln!("Error: Please provide a file path. Example: --run script.mrm");
+                eprintln!("Error: Please provide a file path.");
+                eprintln!("Example: merustmar --run script.mrm");
+                std::process::exit(1);
             } else {
                 runner::run_file(&args[2]);
             }
         }
-        _ => {
-            print_usage();
+        "--help" | "-h" => print_help(),
+        "--version" | "-V" => {
+            println!("merustmar {}", env!("CARGO_PKG_VERSION"));
+        }
+        unknown => {
+            eprintln!("Error: Unknown command '{}'", unknown);
+            eprintln!();
+            print_help();
+            std::process::exit(1);
         }
     }
 }
 
-fn print_usage() {
-    println!("Usage:");
-    println!("  --input          Start the interactive REPL");
-    println!("  --run <file.mrm> Run a specific source file");
+fn print_help() {
+    print!("{}", HELP_TEXT);
 }
