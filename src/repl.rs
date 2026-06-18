@@ -11,7 +11,7 @@ pub fn start() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut input = String::new();
-    let env = Environment::new(); // ← outside the loop so state persists!
+    let env = Environment::new(); //  outside the loop so state persists!
 
     loop {
         print!("{}", PROMPT);
@@ -42,9 +42,8 @@ pub fn start() {
 }
 
 fn print_parser_errors(out: &mut impl Write, errors: &[String]) {
-    writeln!(out, "Woops! We ran into some parser errors:").unwrap();
+    writeln!(out, "Oops! We ran into some parser errors:").unwrap();
     for msg in errors {
-        writeln!(out, "\t{}", msg).unwrap();
+        writeln!(out, "{}\n", msg).unwrap();
     }
 }
-

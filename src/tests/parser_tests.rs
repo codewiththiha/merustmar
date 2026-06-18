@@ -1260,3 +1260,19 @@ fn test_parsing_index_expressions() {
         panic!("index is None");
     }
 }
+
+#[test]
+fn test_parser_error_formatting() {
+    let input = "ထား = 5။";
+    let mut lexer = Lexer::new(input);
+    let mut parser = Parser::new(&mut lexer);
+    parser.parse_program();
+
+    let errors = parser.return_errors();
+    assert_eq!(errors.len(), 2, "Expected exactly two errors, got: {:?}", errors);
+
+    let expected_error_1 = "Error at Line 1, Token 2: expected next token to be Ident, got Assign ('=') instead.\n 1 | ထား = 5။\n         ^";
+    let expected_error_2 = "Error at Line 1, Token 2: no prefix parse function for Assign ('=') found\n 1 | ထား = 5။\n         ^";
+    assert_eq!(errors[0], expected_error_1);
+    assert_eq!(errors[1], expected_error_2);
+}

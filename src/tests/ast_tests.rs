@@ -8,14 +8,14 @@ fn test_ast_string() {
     // 1. Manually build the AST nodes (No Lexer, No Parser!)
     let program = Program {
         statements: vec![Statement::Let(LetStatement {
-            token: Token::new(TokenType::Let, "ထား".to_string()),
+            token: Token::dummy(TokenType::Let, "ထား".to_string()),
             name: Identifier {
-                token: Token::new(TokenType::Ident, "x".to_string()),
+                token: Token::dummy(TokenType::Ident, "x".to_string()),
                 value: "x".to_string(),
             },
             // We manually insert the 'y' expression here
             value: Some(Expression::Identifier(Identifier {
-                token: Token::new(TokenType::Ident, "y".to_string()),
+                token: Token::dummy(TokenType::Ident, "y".to_string()),
                 value: "y".to_string(),
             })),
         })],

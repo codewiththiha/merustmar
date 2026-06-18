@@ -66,8 +66,8 @@ impl<'a> Parser<'a> {
     pub fn new(lexer: &'a mut Lexer<'a>) -> Self {
         let mut parser = Parser {
             lexer,
-            cur_token: Token::new(TokenType::Illegial, "".to_string()),
-            peek_token: Token::new(TokenType::Illegial, "".to_string()),
+            cur_token: Token::dummy(TokenType::Illegial, "".to_string()),
+            peek_token: Token::dummy(TokenType::Illegial, "".to_string()),
             errors: Vec::new(),
             prefix_parse_fns: HashMap::new(),
             infix_parse_fns: HashMap::new(),
@@ -347,7 +347,8 @@ impl<'a> Parser<'a> {
             })),
             None => {
                 let msg = format!("could not parse {:?} as integer", self.cur_token.literal);
-                self.errors.push(msg);
+                let token = self.cur_token.clone();
+                self.emit_error(&token, &msg);
                 None
             }
         }
@@ -363,7 +364,8 @@ impl<'a> Parser<'a> {
             })),
             None => {
                 let msg = format!("could not parse {:?} as float", self.cur_token.literal);
-                self.errors.push(msg);
+                let token = self.cur_token.clone();
+                self.emit_error(&token, &msg);
                 None
             }
         }
@@ -414,13 +416,19 @@ impl<'a> Parser<'a> {
 
         // Build the function literal expression
         let function_literal = Expression::FunctionLiteral(FunctionLiteral {
-            token: fn_token,
+            token: fn_token.clone(),
             parameters,
             body,
         });
 
         // Desugar into a Let statement
-        let let_token = Token::new(TokenType::Let, "ထား".to_string());
+        let let_token = Token::new(
+            TokenType::Let,
+            "ထား".to_string(),
+            fn_token.line,
+            fn_token.column,
+            fn_token.token_index,
+        );
 
         if self.peek_token_is(TokenType::Semicolon) {
             self.next_token();
@@ -718,7 +726,7 @@ impl<'a> Parser<'a> {
         // cleaner if you want other cleaner option!!
         self.cur_token = std::mem::replace(
             &mut self.peek_token,
-            Token::new(TokenType::Illegial, "".to_string()),
+            Token::dummy(TokenType::Illegial, "".to_string()),
         );
         self.peek_token = self.lexer.next_token();
     }
@@ -730,10 +738,11 @@ impl<'a> Parser<'a> {
 
     pub fn peek_error(&mut self, t: TokenType) {
         let msg = format!(
-            "expected next token to be {:?} got {:?} instead.",
-            t, self.peek_token.token_type
+            "expected next token to be {:?}, got {:?} ('{}') instead.",
+            t, self.peek_token.token_type, self.peek_token.literal
         );
-        self.errors.push(msg);
+        let token = self.peek_token.clone();
+        self.emit_error(&token, &msg);
     }
 
     fn register_prefix(&mut self, token_type: TokenType, fn_ptr: PrefixParseFn<'a>) {
@@ -762,12 +771,14 @@ impl<'a> Parser<'a> {
             false
         }
     }
+
     pub fn no_prefix_parse_fn_error(&mut self) {
         let msg = format!(
-            "no prefix parse function for {:?} found",
-            self.cur_token.token_type
+            "no prefix parse function for {:?} ('{}') found",
+            self.cur_token.token_type, self.cur_token.literal
         );
-        self.errors.push(msg);
+        let token = self.cur_token.clone();
+        self.emit_error(&token, &msg);
     }
 
     pub fn peek_precedence(&self) -> Precedence {
@@ -776,5 +787,38 @@ impl<'a> Parser<'a> {
 
     pub fn cur_precedence(&self) -> Precedence {
         Precedence::from_token_type(self.cur_token.token_type)
+    }
+
+    fn emit_error(&mut self, token: &Token, msg: &str) {
+        let line_idx = token.line.saturating_sub(1);
+        let lines: Vec<&str> = self.lexer.input.lines().collect();
+
+        let mut formatted_msg = format!(
+            "Error at Line {}, Token {}: {}",
+            token.line, token.token_index, msg
+        );
+
+        if let Some(source_line) = lines.get(line_idx) {
+            let line_num_str = token.line.to_string();
+            formatted_msg.push_str(&format!("\n {} | {}\n", line_num_str, source_line));
+
+            let mut padding = String::new();
+            padding.push_str(&" ".repeat(line_num_str.len() + 4)); // Padding for " 12 | "
+
+            // Use the same whitespace found in the code (tabs vs space) to ensure accurate alignment
+            for c in source_line.chars().take(token.column.saturating_sub(1)) {
+                if c == '\t' {
+                    padding.push('\t');
+                } else {
+                    padding.push(' ');
+                }
+            }
+
+            let token_len = token.literal.chars().count().max(1);
+            let carets = "^".repeat(token_len);
+            formatted_msg.push_str(&format!("{}{}", padding, carets));
+        }
+
+        self.errors.push(formatted_msg);
     }
 }

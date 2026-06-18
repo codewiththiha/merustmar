@@ -34,8 +34,8 @@ pub fn run_file(path: &str) {
 }
 
 fn print_parser_errors(errors: &[String]) {
-    eprintln!("Woops! We ran into some stupid errors:");
+    eprintln!("Oops! We ran into some syntax errors:");
     for msg in errors {
-        eprintln!("\t{}", msg);
+        eprintln!("{}\n", msg);
     }
 }

@@ -24,7 +24,8 @@ pub fn run_merustmar(input: &str) -> String {
 
     let errors = parser.return_errors();
     if !errors.is_empty() {
-        return format!("Parser Errors:\n{}", errors.join("\n"));
+        // Space them beautifully
+        return format!("Parser Errors:\n{}", errors.join("\n\n"));
     }
 
     // Evaluate

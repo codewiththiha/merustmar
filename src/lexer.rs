@@ -9,6 +9,9 @@ pub struct Lexer<'a> {
     // architecture
     pub read_position: usize,
     pub position: usize,
+    pub line: usize,
+    pub column: usize,
+    pub token_index: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -18,6 +21,9 @@ impl<'a> Lexer<'a> {
             ch: None,
             read_position: 0,
             position: 0,
+            line: 1,   // Start at line 1
+            column: 1, // Start at column 1 (1-based)
+            token_index: 0,
         };
         lexer.read_char();
         lexer
@@ -34,7 +40,7 @@ impl<'a> Lexer<'a> {
                 break;
             }
         }
-        val.to_string() // Converts ၅ back to "5" for the parser
+        val.to_string()
     }
 
     pub fn read_number(&mut self) -> (String, bool) {
@@ -88,6 +94,16 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn read_char(&mut self) {
+        if let Some(ch) = self.ch {
+            if ch == '\n' {
+                self.line += 1;
+                self.column = 1;
+                self.token_index = 0;
+            } else {
+                self.column += 1;
+            }
+        }
+
         if self.read_position >= self.input.len() {
             self.ch = None;
             self.position = self.read_position;
@@ -126,58 +142,220 @@ impl<'a> Lexer<'a> {
 
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
+
+        self.token_index += 1;
+        let tok_line = self.line;
+        let tok_column = self.column;
+        let tok_idx = self.token_index;
+
         let token = match self.ch {
             Some('=') => {
                 if self.peek_char() == Some('=') {
                     self.read_char();
-                    Token::new(TokenType::Eq, "==".to_string())
+                    Token::new(
+                        TokenType::Eq,
+                        "==".to_string(),
+                        tok_line,
+                        tok_column,
+                        tok_idx,
+                    )
                 } else {
-                    Token::new(TokenType::Assign, "=".to_string())
+                    Token::new(
+                        TokenType::Assign,
+                        "=".to_string(),
+                        tok_line,
+                        tok_column,
+                        tok_idx,
+                    )
                 }
             }
             Some(ch) if is_myanmar_digit(ch) => {
                 let literal = self.read_myanmar_number();
-                return Token::new(TokenType::MyanmarInt, literal);
+                return Token::new(
+                    TokenType::MyanmarInt,
+                    literal,
+                    tok_line,
+                    tok_column,
+                    tok_idx,
+                );
             }
-            Some('။') => Token::new(TokenType::Semicolon, "။".to_string()),
-            Some('(') => Token::new(TokenType::LParen, "(".to_string()),
-            Some(')') => Token::new(TokenType::RParen, ")".to_string()),
-            Some(',') => Token::new(TokenType::Comma, ",".to_string()),
-            Some('+') => Token::new(TokenType::Plus, "+".to_string()),
-            Some('{') => Token::new(TokenType::LBrace, "{".to_string()),
-            Some('}') => Token::new(TokenType::RBrace, "}".to_string()),
-            Some('[') => Token::new(TokenType::LBRACKET, "[".to_string()),
-            Some(']') => Token::new(TokenType::RBRACKET, "]".to_string()),
-            Some(':') => Token::new(TokenType::Colon, ":".to_string()),
+            Some('။') => Token::new(
+                TokenType::Semicolon,
+                "။".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('(') => Token::new(
+                TokenType::LParen,
+                "(".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some(')') => Token::new(
+                TokenType::RParen,
+                ")".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some(',') => Token::new(
+                TokenType::Comma,
+                ",".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('+') => Token::new(
+                TokenType::Plus,
+                "+".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('{') => Token::new(
+                TokenType::LBrace,
+                "{".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('}') => Token::new(
+                TokenType::RBrace,
+                "}".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('[') => Token::new(
+                TokenType::LBRACKET,
+                "[".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some(']') => Token::new(
+                TokenType::RBRACKET,
+                "]".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some(':') => Token::new(
+                TokenType::Colon,
+                ":".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
             Some('!') => {
                 if self.peek_char() == Some('=') {
                     self.read_char();
-                    Token::new(TokenType::NotEq, "!=".to_string())
+                    Token::new(
+                        TokenType::NotEq,
+                        "!=".to_string(),
+                        tok_line,
+                        tok_column,
+                        tok_idx,
+                    )
                 } else {
-                    Token::new(TokenType::Bang, "!".to_string())
+                    Token::new(
+                        TokenType::Bang,
+                        "!".to_string(),
+                        tok_line,
+                        tok_column,
+                        tok_idx,
+                    )
                 }
             }
-            Some('-') => Token::new(TokenType::Minus, "-".to_string()),
-            Some('/') => Token::new(TokenType::Slash, "/".to_string()),
-            Some('*') => Token::new(TokenType::Asterisk, "*".to_string()),
-            Some('>') => Token::new(TokenType::Gt, ">".to_string()),
-            Some('<') => Token::new(TokenType::Lt, "<".to_string()),
-            Some('"') => Token::new(TokenType::String, self.read_string()),
-            Some('%') => Token::new(TokenType::Percent, "%".to_string()),
+            Some('-') => Token::new(
+                TokenType::Minus,
+                "-".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('/') => Token::new(
+                TokenType::Slash,
+                "/".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('*') => Token::new(
+                TokenType::Asterisk,
+                "*".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('>') => Token::new(
+                TokenType::Gt,
+                ">".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('<') => Token::new(
+                TokenType::Lt,
+                "<".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('"') => Token::new(
+                TokenType::String,
+                self.read_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
+            Some('%') => Token::new(
+                TokenType::Percent,
+                "%".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
             Some('&') => {
                 if self.peek_char() == Some('&') {
                     self.read_char();
-                    Token::new(TokenType::And, "&&".to_string())
+                    Token::new(
+                        TokenType::And,
+                        "&&".to_string(),
+                        tok_line,
+                        tok_column,
+                        tok_idx,
+                    )
                 } else {
-                    Token::new(TokenType::Illegial, "&".to_string())
+                    Token::new(
+                        TokenType::Illegial,
+                        "&".to_string(),
+                        tok_line,
+                        tok_column,
+                        tok_idx,
+                    )
                 }
             }
             Some('|') => {
                 if self.peek_char() == Some('|') {
                     self.read_char();
-                    Token::new(TokenType::Or, "||".to_string())
+                    Token::new(
+                        TokenType::Or,
+                        "||".to_string(),
+                        tok_line,
+                        tok_column,
+                        tok_idx,
+                    )
                 } else {
-                    Token::new(TokenType::Illegial, "|".to_string())
+                    Token::new(
+                        TokenType::Illegial,
+                        "|".to_string(),
+                        tok_line,
+                        tok_column,
+                        tok_idx,
+                    )
                 }
             }
             // NOTICE how in this case we used explict return , cuz if we don't do that we might
@@ -191,23 +369,32 @@ impl<'a> Lexer<'a> {
                 // TODO noticee how rust handled literal(String) and cast to &str (the lookup_ident
                 // only accept &str not &string) research about that!
                 let token_type = Token::lookup_ident(&literal);
-                return Token::new(token_type, literal);
+                return Token::new(token_type, literal, tok_line, tok_column, tok_idx);
             }
             Some(ch) if is_digit(ch) => {
                 let (literal, is_float) = self.read_number();
                 if is_float {
-                    return Token::new(TokenType::Float, literal);
+                    return Token::new(TokenType::Float, literal, tok_line, tok_column, tok_idx);
                 } else {
-                    return Token::new(TokenType::Int, literal);
+                    return Token::new(TokenType::Int, literal, tok_line, tok_column, tok_idx);
                 }
             }
             // TODO none should not create a new token tho
             // index 0 having none can cause an error not a problem tho adding skip space can fix
-            None => Token::new(TokenType::Eof, "".to_string()),
+            None => Token::new(
+                TokenType::Eof,
+                "".to_string(),
+                tok_line,
+                tok_column,
+                tok_idx,
+            ),
             _ => Token::new(
                 TokenType::Illegial,
                 // TODO study this pattern
                 self.ch.map(|c| c.to_string()).unwrap_or_default(),
+                tok_line,
+                tok_column,
+                tok_idx,
             ),
         };
         self.read_char();
